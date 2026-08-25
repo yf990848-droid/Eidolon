@@ -18,7 +18,7 @@ Eidolon 是一个集 AI 小说创作、作品管理和沉浸式阅读于一体�
 
 ## 本地运行
 
-环境要求：Node.js `>=22.13.0`。
+环境要求：Node.js `>=22.13.0`，支持 Windows PowerShell、macOS 和 Linux。
 
 ```bash
 npm ci
