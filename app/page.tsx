@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { AppShell } from "../components/app-shell";
 import { BOOKS, GENRES } from "../lib/mock-data";
 
@@ -24,7 +23,8 @@ export default function Home() {
 
           <aside className="daily-card reveal delay-1" aria-label="每日创作灵感">
             <div className="daily-art">
-              <Image src="/eidolon-cover.webp" alt="星夜图书馆中的写作者" width={1086} height={1448} priority />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/eidolon-cover.webp" alt="星夜图书馆中的写作者" />
               <div className="daily-overlay">
                 <span>每日灵感</span>
                 <strong>一座不下雨的城，<br />只有遗失的黑伞是湿的。</strong>
