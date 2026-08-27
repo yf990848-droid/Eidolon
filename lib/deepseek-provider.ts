@@ -1,9 +1,17 @@
 import { MockTextProvider, type TextGenerationRequest, type TextGenerationResult, type TextModelProvider } from "./providers";
 
 type DeepSeekResponse = {
-  choices?: Array<{ message?: { content?: string } }>;
+  choices?: Array<{
+    finish_reason?: string | null;
+    message?: { content?: string | null; reasoning_content?: string | null };
+  }>;
   model?: string;
-  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    completion_tokens_details?: { reasoning_tokens?: number };
+  };
   error?: { message?: string };
 };
 
@@ -29,6 +37,7 @@ export class DeepSeekProvider implements TextModelProvider {
         ],
         max_tokens: request.maxTokens ?? 2200,
         temperature: 0.8,
+        thinking: { type: "disabled" },
         ...(request.json ? { response_format: { type: "json_object" } } : {}),
       }),
     });
@@ -37,8 +46,24 @@ export class DeepSeekProvider implements TextModelProvider {
     if (!response.ok) {
       throw new Error(payload.error?.message ?? `DeepSeek 请求失败（${response.status}）`);
     }
-    const content = payload.choices?.[0]?.message?.content;
-    if (!content) throw new Error("DeepSeek 未返回内容");
+
+    const choice = payload.choices?.[0];
+    const content = choice?.message?.content?.trim();
+    if (!content) {
+      const finishReason = choice?.finish_reason;
+      if (finishReason === "length") {
+        throw new Error("DeepSeek 输出达到长度上限，未生成最终内容");
+      }
+      if (finishReason === "content_filter") {
+        throw new Error("DeepSeek 返回内容被安全策略拦截");
+      }
+      if (finishReason === "insufficient_system_resource") {
+        throw new Error("DeepSeek 服务资源暂时不足，请稍后重试");
+      }
+
+      const reason = finishReason ? `（结束原因：${finishReason}）` : "";
+      throw new Error(`DeepSeek 未返回内容${reason}`);
+    }
 
     return {
       content,
