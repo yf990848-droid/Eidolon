@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-test("renders the Eidolon home page", async () => {
+test("renders the Paper Realm home page", async () => {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
@@ -27,6 +27,6 @@ test("renders the Eidolon home page", async () => {
     /^text\/html\b/i,
   );
   const html = await response.text();
-  assert.match(html, /Eidolon/);
-  assert.match(html, /让故事找到/);
+  assert.match(html, /纸境/);
+  assert.match(html, /白天属于面包/);
 });

@@ -3,17 +3,17 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
-  title: { default: "Eidolon · 私人小说创作室", template: "%s · Eidolon" },
-  description: "从灵感、大纲到完整小说，让故事找到它的声音。",
+  title: { default: "纸境 · 白天属于面包，夜晚属于纸境", template: "%s · 纸境" },
+  description: "纸境连接现实与梦境，在这里与 AI 共创，或安静地写下自己的故事。",
   openGraph: {
-    title: "Eidolon · 私人小说创作室",
-    description: "从灵感、大纲到完整小说，让故事找到它的声音。",
+    title: "纸境 · Eidolon",
+    description: "白天属于面包，夜晚属于纸境。",
     images: [{ url: "/og.png", width: 1200, height: 630 }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Eidolon · 私人小说创作室",
-    description: "从灵感、大纲到完整小说，让故事找到它的声音。",
+    title: "纸境 · Eidolon",
+    description: "白天属于面包，夜晚属于纸境。",
     images: ["/og.png"],
   },
   icons: {

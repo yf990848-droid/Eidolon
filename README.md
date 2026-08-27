@@ -1,15 +1,16 @@
-# Eidolon
+# 纸境 · Eidolon
 
-Eidolon 是一个集 AI 小说创作、作品管理和沉浸式阅读于一体的个人写作网站。
+纸境是一个集 AI 小说共创、原创写作、作品管理和沉浸式阅读于一体的个人写作网站。
 
-当前为第一阶段交互原型：所有生成内容均为模拟数据，不会调用或消耗 DeepSeek、通义万相 API。
+> 白天属于面包，夜晚属于纸境。
 
 ## 当前功能
 
 - 文学化首页与每日灵感
 - 题材选择和个人想法输入
-- 三个模拟创意方案
-- 模拟故事大纲
+- DeepSeek 创意方案、故事大纲、章节正文和润色改写
+- 无密钥时自动使用模拟生成
+- 独立原创写作页面及按需写作伴侣
 - 个人书架
 - 沉浸式阅读页
 - 澄心、夜航星、象牙塔三套主题
@@ -47,18 +48,27 @@ Copy-Item .env.example .env.local
 
 请勿提交 `.env.local`，也不要把长期有效的 API Key 放入前端代码。
 
+DeepSeek 配置示例：
+
+```env
+DEEPSEEK_API_KEY=你的密钥
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_PRO_MODEL=deepseek-v4-pro
+```
+
 ## 页面
 
 - `/`：首页
-- `/studio`：创作工作台
+- `/studio`：AI 共创工作台
+- `/write`：原创写作与按需写作伴侣
 - `/library`：个人书架
 - `/read`：在线阅读
 
 ## 下一阶段
 
-1. 接入 DeepSeek 服务端 API。
-2. 完成文风分析、大纲和正文生成。
-3. 接入通义万相 `wanx2.0-t2i-turbo`。
-4. 引入正式数据持久化和作品导出。
+1. 完成文风分析和长期小说记忆。
+2. 接入通义万相 `wanx2.0-t2i-turbo`。
+3. 引入正式数据持久化和作品导出。
 
 产品方案参见 `docs/MVP_DESIGN.md`，项目进度参见 `docs/PROJECT_CONTEXT.md`。

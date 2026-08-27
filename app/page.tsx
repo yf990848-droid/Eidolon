@@ -10,14 +10,15 @@ export default function Home() {
       <main className="page home-page">
         <section className="hero-grid">
           <div className="hero-copy reveal">
-            <p className="eyebrow">你的私人写作室</p>
-            <h1>让故事找到<br /><em>它的声音</em></h1>
+            <p className="eyebrow">纸境 · Eidolon</p>
+            <h1>白天属于面包，<br /><em>夜晚属于纸境</em></h1>
             <p className="hero-lead">
-              从一缕念头，到完整世界。Eidolon 会记住你的文风、人物与伏笔，陪你写完每一个尚未落笔的故事。
+              纸境连接现实与梦境。你可以与 AI 一起搭建完整世界，也可以关掉喧嚣，只写属于自己的那一句话。
             </p>
             <div className="hero-actions">
-              <Link className="button button-primary" href="/studio">开始一部新作品</Link>
-              <Link className="button button-quiet" href="/library">翻开我的书架</Link>
+              <Link className="button button-primary" href="/studio">与 AI 共创</Link>
+              <Link className="button button-quiet" href="/write">开始原创写作</Link>
+              <Link className="button button-ghost" href="/library">翻开我的书架</Link>
             </div>
           </div>
 
@@ -46,7 +47,7 @@ export default function Home() {
         <section className="section-block">
           <div className="section-heading">
             <div><p className="eyebrow">从一个方向开始</p><h2>今天，想写什么？</h2></div>
-            <p>选择题材，或带上你自己的念头进入创作工作台。</p>
+            <p>选择题材进入 AI 共创，或直接打开一张空白稿纸。</p>
           </div>
           <div className="genre-grid">
             {GENRES.map((genre, index) => (

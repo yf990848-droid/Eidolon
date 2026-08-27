@@ -1,10 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../../components/app-shell";
-import { GENRES, IDEAS } from "../../lib/mock-data";
+import { GENRES, IDEAS as FALLBACK_IDEAS } from "../../lib/mock-data";
 
-type Stage = "brief" | "ideas" | "outline";
+type Stage = "brief" | "ideas" | "outline" | "chapter";
+type Idea = { label: string; title: string; summary: string; sample: string };
+type Outline = { premise: string; tone: string; acts: Array<{ title: string; summary: string }> };
+
+async function callAgent<T>(task: string, input: Record<string, unknown>): Promise<{ data: T; model: string }> {
+  const response = await fetch("/api/agent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ task, input }),
+  });
+  const payload = await response.json() as { data?: T; model?: string; error?: string };
+  if (!response.ok || payload.data === undefined) throw new Error(payload.error ?? "生成失败，请稍后重试");
+  return { data: payload.data, model: payload.model ?? "unknown" };
+}
 
 export default function StudioPage() {
   const [stage, setStage] = useState<Stage>("brief");
@@ -12,8 +25,18 @@ export default function StudioPage() {
   const [length, setLength] = useState("中篇");
   const [style, setStyle] = useState("雨夜独白");
   const [thought, setThought] = useState("");
+  const [ideas, setIdeas] = useState<Idea[]>(FALLBACK_IDEAS);
   const [selectedIdea, setSelectedIdea] = useState(0);
+  const [outline, setOutline] = useState<Outline | null>(null);
+  const [chapter, setChapter] = useState("");
+  const [instruction, setInstruction] = useState("写出第一章开场，建立人物处境并留下悬念。");
+  const [companionQuestion, setCompanionQuestion] = useState("");
+  const [companionReply, setCompanionReply] = useState("");
+  const [model, setModel] = useState("等待首次生成");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const chapterRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -21,44 +44,103 @@ export default function StudioPage() {
       const queryGenre = params.get("genre");
       if (queryGenre) setGenre(queryGenre);
       if (params.get("idea") === "rain") setThought("一座不下雨的城市里，只有一把遗失的黑伞是湿的。");
-      const draft = window.localStorage.getItem("eidolon-draft-brief");
+      const draft = window.localStorage.getItem("paper-realm-ai-draft");
       if (draft && !params.toString()) {
         const parsed = JSON.parse(draft);
-        setGenre(parsed.genre ?? "悬疑推理"); setLength(parsed.length ?? "中篇"); setStyle(parsed.style ?? "雨夜独白"); setThought(parsed.thought ?? "");
+        setGenre(parsed.genre ?? "悬疑推理");
+        setLength(parsed.length ?? "中篇");
+        setStyle(parsed.style ?? "雨夜独白");
+        setThought(parsed.thought ?? "");
+        setChapter(parsed.chapter ?? "");
       }
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem("eidolon-draft-brief", JSON.stringify({ genre, length, style, thought }));
+    window.localStorage.setItem("paper-realm-ai-draft", JSON.stringify({ genre, length, style, thought, chapter }));
     const showTimer = window.setTimeout(() => setSaved(true), 0);
     const hideTimer = window.setTimeout(() => setSaved(false), 1200);
     return () => { window.clearTimeout(showTimer); window.clearTimeout(hideTimer); };
-  }, [genre, length, style, thought]);
+  }, [genre, length, style, thought, chapter]);
 
-  const progress = useMemo(() => stage === "brief" ? 1 : stage === "ideas" ? 2 : 3, [stage]);
+  const progress = useMemo(() => ({ brief: 1, ideas: 2, outline: 3, chapter: 5 })[stage], [stage]);
+  const titles = { brief: "从哪里开始？", ideas: "选择故事的命运", outline: "搭起故事的骨骼", chapter: "写下故事的第一声呼吸" };
+
+  async function generateIdeas() {
+    setLoading(true); setError("");
+    try {
+      const result = await callAgent<{ ideas: Idea[] }>("idea", { genre, length, style, thought });
+      if (!Array.isArray(result.data.ideas) || result.data.ideas.length !== 3) throw new Error("创意方案格式不完整，请重试");
+      setIdeas(result.data.ideas); setSelectedIdea(0); setModel(result.model); setStage("ideas");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "生成失败"); }
+    finally { setLoading(false); }
+  }
+
+  async function generateOutline() {
+    setLoading(true); setError("");
+    try {
+      const result = await callAgent<Outline>("outline", { genre, length, style, thought, idea: ideas[selectedIdea] });
+      setOutline(result.data); setModel(result.model); setStage("outline");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "生成失败"); }
+    finally { setLoading(false); }
+  }
+
+  async function generateChapter() {
+    setLoading(true); setError("");
+    try {
+      const result = await callAgent<string>("chapter", { genre, length, style, thought, idea: ideas[selectedIdea], outline, instruction });
+      setChapter(result.data); setModel(result.model); setStage("chapter");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "生成失败"); }
+    finally { setLoading(false); }
+  }
+
+  async function rewriteSelection() {
+    const field = chapterRef.current;
+    if (!field || !chapter.trim()) return;
+    const start = field.selectionStart;
+    const end = field.selectionEnd;
+    const source = start === end ? chapter : chapter.slice(start, end);
+    setLoading(true); setError("");
+    try {
+      const result = await callAgent<string>("rewrite", { style, selectedText: source, instruction: instruction || "在不改变情节的情况下润色" });
+      setChapter(start === end ? result.data : chapter.slice(0, start) + result.data + chapter.slice(end));
+      setModel(result.model);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "改写失败"); }
+    finally { setLoading(false); }
+  }
+
+  async function askCompanion() {
+    if (!companionQuestion.trim()) return;
+    setLoading(true); setError("");
+    try {
+      const response = await fetch("/api/companion", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: companionQuestion, context: chapter || thought }) });
+      const payload = await response.json() as { suggestion?: string; model?: string; error?: string };
+      if (!response.ok || !payload.suggestion) throw new Error(payload.error ?? "写作伴侣暂时没有回应");
+      setCompanionReply(payload.suggestion); setModel(payload.model ?? model); setCompanionQuestion("");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "询问失败"); }
+    finally { setLoading(false); }
+  }
 
   return (
     <AppShell>
       <main className="studio-page">
         <aside className="studio-rail">
-          <div className="rail-title"><span>新作</span><strong>尚未命名</strong></div>
+          <div className="rail-title"><span>AI 共创</span><strong>{ideas[selectedIdea]?.title ?? "尚未命名"}</strong></div>
           <ol className="stage-list">
             {["故事起点", "创意方案", "故事大纲", "章节细纲", "正文创作"].map((label, index) => (
-              <li className={index + 1 === progress ? "current" : index + 1 < progress ? "done" : ""} key={label}>
-                <span>{String(index + 1).padStart(2, "0")}</span>{label}
-              </li>
+              <li className={index + 1 === progress ? "current" : index + 1 < progress ? "done" : ""} key={label}><span>{String(index + 1).padStart(2, "0")}</span>{label}</li>
             ))}
           </ol>
-          <div className="rail-note"><span>创作札记</span><p>好的故事并不急于回答，它先留下一个值得追问的问题。</p></div>
+          <div className="rail-note"><span>当前模型</span><p>{model}<br />没有配置密钥时自动使用模拟模式。</p></div>
         </aside>
 
         <section className="studio-canvas">
           <header className="studio-header">
-            <div><p className="eyebrow">创作工作台 · 第 {progress} 步</p><h1>{stage === "brief" ? "从哪里开始？" : stage === "ideas" ? "选择故事的命运" : "搭起故事的骨骼"}</h1></div>
+            <div><p className="eyebrow">纸境 AI 共创 · 第 {progress} 步</p><h1>{titles[stage]}</h1></div>
             <span className={`save-state ${saved ? "visible" : ""}`}>文字已落定</span>
           </header>
+          {error && <div className="error-banner" role="alert">{error}</div>}
 
           {stage === "brief" && <div className="brief-form reveal">
             <fieldset><legend>选择题材</legend><div className="choice-grid genres">{GENRES.map((item) => <button className={genre === item.name ? "selected" : ""} onClick={() => setGenre(item.name)} key={item.name}><span>{item.symbol}</span>{item.name}</button>)}</div></fieldset>
@@ -67,33 +149,41 @@ export default function StudioPage() {
               <fieldset><legend>篇幅</legend><div className="segmented">{["短篇", "中篇", "长篇"].map((item) => <button className={length === item ? "selected" : ""} onClick={() => setLength(item)} key={item}>{item}</button>)}</div></fieldset>
               <fieldset><legend>个人文风</legend><select value={style} onChange={(event) => setStyle(event.target.value)}><option>雨夜独白</option><option>古典叙事</option><option>都市冷峻</option><option>轻盈青春</option></select></fieldset>
             </div>
-            <div className="studio-actions"><p>本阶段使用模拟内容，不会产生模型费用。</p><button className="button button-primary" onClick={() => setStage("ideas")}>生成三个创意方案</button></div>
+            <div className="studio-actions"><p>每次点击只发起一次生成请求。</p><button disabled={loading} className="button button-primary" onClick={generateIdeas}>{loading ? "故事正在寻找方向…" : "生成三个创意方案"}</button></div>
           </div>}
 
           {stage === "ideas" && <div className="idea-stage reveal">
             <p className="stage-intro">根据“{genre} · {length} · {style}”生成。你可以选择一个方向，稍后仍能自由修改。</p>
-            <div className="idea-list">{IDEAS.map((idea, index) => <article className={`idea-card ${selectedIdea === index ? "selected" : ""}`} key={idea.title} onClick={() => setSelectedIdea(index)}>
+            <div className="idea-list">{ideas.map((idea, index) => <article className={`idea-card ${selectedIdea === index ? "selected" : ""}`} key={`${idea.title}-${index}`} onClick={() => setSelectedIdea(index)}>
               <div className="idea-number">方案 {String(index + 1).padStart(2, "0")}</div><p className="eyebrow">{idea.label}</p><h2>{idea.title}</h2><p className="idea-summary">{idea.summary}</p><blockquote>{idea.sample}</blockquote><button>{selectedIdea === index ? "已选择" : "选择这个故事"}</button>
             </article>)}</div>
-            <div className="studio-actions"><button className="button button-ghost" onClick={() => setStage("brief")}>返回修改</button><button className="button button-primary" onClick={() => setStage("outline")}>以《{IDEAS[selectedIdea].title}》生成大纲</button></div>
+            <div className="studio-actions"><button className="button button-ghost" onClick={() => setStage("brief")}>返回修改</button><button disabled={loading} className="button button-primary" onClick={generateOutline}>{loading ? "正在搭建故事…" : `以《${ideas[selectedIdea]?.title}》生成大纲`}</button></div>
           </div>}
 
-          {stage === "outline" && <div className="outline-stage reveal">
-            <div className="outline-title"><div><span>暂定书名</span><h2>{IDEAS[selectedIdea].title}</h2></div><button className="button button-small button-quiet">修改书名</button></div>
+          {stage === "outline" && outline && <div className="outline-stage reveal">
+            <div className="outline-title"><div><span>暂定书名</span><h2>{ideas[selectedIdea]?.title}</h2></div><button className="button button-small button-quiet" onClick={() => setStage("ideas")}>重选方案</button></div>
             <div className="outline-grid">
-              <section><span>核心命题</span><textarea defaultValue="当记忆可以被保存、交换乃至伪造，一个人究竟凭什么确认自己是谁？" rows={3} /></section>
-              <section><span>故事基调</span><textarea defaultValue="潮湿、克制而微带暖意的都市寓言；真相逐层揭开，情感在细节中缓慢显现。" rows={3} /></section>
-              <section className="wide"><span>故事结构</span>{["第一幕 · 缺失", "第二幕 · 追索", "第三幕 · 认领"].map((title, index) => <div className="act" key={title}><strong>{title}</strong><p>{["林默在记忆典当行发现一枚与自己梦境相同的童年记忆，平静生活出现裂缝。", "他沿着记忆原主人的线索调查城市旧案，却发现每个证人都记得一个不同的自己。", "城市记忆系统即将重置，他必须在真实的过去与主动选择的人生之间作出决定。"][index]}</p></div>)}</section>
+              <section><span>核心命题</span><textarea value={outline.premise} onChange={(event) => setOutline({ ...outline, premise: event.target.value })} rows={3} /></section>
+              <section><span>故事基调</span><textarea value={outline.tone} onChange={(event) => setOutline({ ...outline, tone: event.target.value })} rows={3} /></section>
+              <section className="wide"><span>故事结构</span>{outline.acts.map((act, index) => <div className="act" key={`${act.title}-${index}`}><strong>{act.title}</strong><p>{act.summary}</p></div>)}</section>
             </div>
-            <div className="studio-actions"><button className="button button-ghost" onClick={() => setStage("ideas")}>重选方案</button><button className="button button-primary">确认大纲，生成章节细纲</button></div>
+            <div className="chapter-instruction"><label htmlFor="chapter-instruction">正文要求</label><input id="chapter-instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} /></div>
+            <div className="studio-actions"><button className="button button-ghost" onClick={() => setStage("ideas")}>返回方案</button><button disabled={loading} className="button button-primary" onClick={generateChapter}>{loading ? "故事正在落笔…" : "确认大纲，生成第一章"}</button></div>
+          </div>}
+
+          {stage === "chapter" && <div className="chapter-stage reveal">
+            <div className="chapter-toolbar"><div><span>正文草稿</span><strong>{chapter.length} 字</strong></div><button disabled={loading || !chapter} className="button button-small button-quiet" onClick={rewriteSelection}>润色选中文字</button></div>
+            <textarea ref={chapterRef} value={chapter} onChange={(event) => setChapter(event.target.value)} placeholder="故事正在寻找它的下一句话。" aria-label="章节正文" />
+            <div className="chapter-instruction"><label htmlFor="rewrite-instruction">生成或改写要求</label><input id="rewrite-instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} /></div>
+            <div className="studio-actions"><button className="button button-ghost" onClick={() => setStage("outline")}>返回大纲</button><button disabled={loading} className="button button-primary" onClick={generateChapter}>{loading ? "正在生成…" : "按要求重新生成"}</button></div>
           </div>}
         </section>
 
         <aside className="agent-panel">
-          <div className="agent-heading"><span className="agent-orb">✦</span><div><strong>写作伴侣</strong><small>模拟模式</small></div></div>
-          <div className="agent-message"><p>{stage === "brief" ? "告诉我你想写什么。不完整的念头也很好，那通常是故事最有生命力的开始。" : stage === "ideas" ? "三个方案共享同一颗种子，却会长成不同的树。先选最让你想继续读下去的那个。" : "大纲不是牢笼，而是一张在迷雾里可以随时修改的地图。"}</p></div>
-          <div className="style-card"><span>当前文风</span><strong>{style}</strong><p>克制冷峻 · 环境映照心理<br />中短句 · 弱修辞 · 对话驱动</p><button>查看文风卡片 →</button></div>
-          <div className="agent-input"><input aria-label="询问写作伴侣" placeholder="问问写作伴侣……" /><button aria-label="发送">↑</button></div>
+          <div className="agent-heading"><span className="agent-orb">✦</span><div><strong>写作伴侣</strong><small>{model}</small></div></div>
+          <div className="agent-message"><p>{companionReply || (stage === "brief" ? "告诉我你想写什么。不完整的念头也很好。" : "我会回答你的具体问题，但故事的选择始终属于你。")}</p></div>
+          <div className="style-card"><span>当前文风</span><strong>{style}</strong><p>你可以询问情节、人物、措辞或节奏问题。</p></div>
+          <div className="agent-input"><input value={companionQuestion} onChange={(event) => setCompanionQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void askCompanion(); }} aria-label="询问写作伴侣" placeholder="问问写作伴侣……" /><button disabled={loading} onClick={askCompanion} aria-label="发送">↑</button></div>
         </aside>
       </main>
     </AppShell>

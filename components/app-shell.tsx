@@ -9,7 +9,7 @@ const THEMES: Array<{ id: ThemeName; name: string }> = [
   { id: "clarity", name: "澄心" }, { id: "voyage", name: "夜航星" }, { id: "ivory", name: "象牙塔" },
 ];
 const NAV = [
-  { href: "/", label: "今日" }, { href: "/studio", label: "创作" },
+  { href: "/", label: "今日" }, { href: "/studio", label: "AI 共创" }, { href: "/write", label: "原创写作" },
   { href: "/library", label: "书架" }, { href: "/read", label: "阅读" },
 ];
 
@@ -33,9 +33,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="site-shell">
       <header className="topbar">
-        <Link href="/" className="brand" aria-label="Eidolon 首页">
-          <span className="brand-glyph">E</span>
-          <span><strong>Eidolon</strong><small>故事的第二重生命</small></span>
+        <Link href="/" className="brand" aria-label="纸境首页">
+          <span className="brand-glyph">纸</span>
+          <span><strong>纸境</strong><small>EIDOLON</small></span>
         </Link>
         <nav className="main-nav" aria-label="主要导航">
           {NAV.map((item) => <Link className={pathname === item.href ? "active" : ""} href={item.href} key={item.href}>{item.label}</Link>)}
@@ -53,7 +53,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
       {children}
       <footer className="site-footer">
-        <span>Eidolon</span><p>愿你写下的每一个世界，都有人抵达。</p><span>个人创作空间 · 2026</span>
+        <span>纸境 · Eidolon</span><p>白天属于面包，夜晚属于纸境</p><span>个人创作空间 · 2026</span>
       </footer>
     </div>
   );
