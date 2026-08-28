@@ -2,12 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AppShell } from "../../components/app-shell";
+import { createLocalId, getBook, saveBook, type BookStatus, type StoredChapter } from "../../lib/local-books";
 
 type Draft = { title: string; chapterTitle: string; content: string };
 const EMPTY_DRAFT: Draft = { title: "未命名作品", chapterTitle: "第一章", content: "" };
 
 export default function OriginalWritingPage() {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [bookId, setBookId] = useState("");
+  const [chapters, setChapters] = useState<StoredChapter[]>([]);
+  const [chapterId, setChapterId] = useState("");
   const [question, setQuestion] = useState("");
   const [suggestion, setSuggestion] = useState("");
   const [model, setModel] = useState("按需回应");
@@ -19,6 +23,20 @@ export default function OriginalWritingPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      const savedBook = params.get("id") ? getBook(params.get("id")!) : undefined;
+      if (savedBook?.mode === "original") {
+        const lastChapter = savedBook.chapters.at(-1);
+        setBookId(savedBook.id);
+        setChapters(savedBook.chapters);
+        if (lastChapter) setChapterId(lastChapter.id);
+        setDraft({
+          title: savedBook.title,
+          chapterTitle: lastChapter?.title ?? `第${savedBook.chapters.length + 1}章`,
+          content: lastChapter?.content ?? "",
+        });
+        return;
+      }
       const saved = window.localStorage.getItem("paper-realm-original-draft");
       if (saved) setDraft({ ...EMPTY_DRAFT, ...JSON.parse(saved) });
     }, 0);
@@ -59,6 +77,48 @@ export default function OriginalWritingPage() {
     setSuggestion("");
   }
 
+  function persistBook(status: BookStatus, continueWriting = false) {
+    if (!draft.title.trim() || !draft.content.trim()) {
+      setError("请先填写作品名称和本章正文");
+      return;
+    }
+    const now = new Date().toISOString();
+    const id = bookId || createLocalId("book");
+    const currentChapter: StoredChapter = {
+      id: chapterId || createLocalId("chapter"),
+      title: draft.chapterTitle.trim() || `第${chapters.length + 1}章`,
+      content: draft.content.trim(),
+      updatedAt: now,
+    };
+    const exists = chapters.some((item) => item.id === currentChapter.id);
+    const nextChapters = exists
+      ? chapters.map((item) => item.id === currentChapter.id ? currentChapter : item)
+      : [...chapters, currentChapter];
+    const existing = getBook(id);
+
+    saveBook({
+      id,
+      mode: "original",
+      title: draft.title.trim(),
+      status,
+      chapters: nextChapters,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    });
+    setBookId(id);
+    setChapters(nextChapters);
+    setChapterId(currentChapter.id);
+    setError("");
+    setSavedAt(new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }));
+
+    if (status === "completed") {
+      window.location.href = "/library";
+    } else if (continueWriting) {
+      setChapterId("");
+      setDraft({ ...draft, chapterTitle: `第${nextChapters.length + 1}章`, content: "" });
+    }
+  }
+
   return (
     <AppShell>
       <main className="writer-page">
@@ -77,6 +137,11 @@ export default function OriginalWritingPage() {
             placeholder="请从一个声音、一扇门或一次告别开始。"
             spellCheck
           />
+          <div className="studio-actions">
+            <button className="button button-quiet" onClick={() => persistBook("writing")}>保存到书架</button>
+            <button className="button button-quiet" onClick={() => persistBook("writing", true)}>保存并写下一章</button>
+            <button className="button button-primary" onClick={() => persistBook("completed")}>完成作品</button>
+          </div>
         </section>
 
         <aside className="companion-panel">

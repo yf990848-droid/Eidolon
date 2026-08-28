@@ -1,19 +1,41 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../../components/app-shell";
-import { BOOKS } from "../../lib/mock-data";
+import { bookWordCount, loadBooks, type StoredBook } from "../../lib/local-books";
+
+const FILTERS = ["全部", "创作中", "已完成"];
 
 export default function LibraryPage() {
   const [filter, setFilter] = useState("全部");
+  const [books, setBooks] = useState<StoredBook[]>([]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setBooks(loadBooks()), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const visibleBooks = useMemo(() => books.filter((book) => {
+    if (filter === "创作中") return book.status === "writing";
+    if (filter === "已完成") return book.status === "completed";
+    return true;
+  }), [books, filter]);
+
   return <AppShell><main className="page inner-page library-page">
-    <header className="page-heading"><div><p className="eyebrow">私人藏书室</p><h1>我的书架</h1></div><p>这里收纳所有仍在生长、已经完成，以及暂时合上的故事。</p></header>
-    <div className="library-toolbar"><div className="filter-tabs">{["全部", "构思中", "创作中", "已完成"].map((item) => <button className={filter === item ? "active" : ""} onClick={() => setFilter(item)} key={item}>{item}</button>)}</div><Link className="button button-primary button-small" href="/studio">＋ 新建作品</Link></div>
-    <section className="library-grid">{BOOKS.map((book, index) => <article className="library-book" key={book.title}>
-      <Link href="/read" className={`book-cover cover-${book.cover}`}><span>{book.genre}</span><strong>{book.title}</strong><small>{book.author}</small></Link>
-      <div className="library-book-meta"><span>{index === 2 ? "已完成" : index === 3 ? "构思中" : "创作中"}</span><h2>{book.title}</h2><p>{book.progress}</p><div className="progress-line"><i style={{ width: `${[58, 24, 100, 8][index]}%` }} /></div><small>{index === 2 ? "三日前完成" : "今日更新"}</small></div>
-    </article>)}</section>
-    <div className="empty-shelf"><span>＋</span><div><strong>下一本书，会从什么开始？</strong><p>一句话、一个梦，或某个不愿忘记的人。</p></div><Link href="/studio">开始构思 →</Link></div>
+    <header className="page-heading"><div><p className="eyebrow">私人藏书室</p><h1>我的书架</h1></div><p>这里收纳所有仍在生长，以及已经完成的故事。</p></header>
+    <div className="library-toolbar"><div className="filter-tabs">{FILTERS.map((item) => <button className={filter === item ? "active" : ""} onClick={() => setFilter(item)} key={item}>{item}</button>)}</div><Link className="button button-primary button-small" href="/studio">＋ 新建作品</Link></div>
+
+    {visibleBooks.length > 0 && <section className="library-grid">{visibleBooks.map((book, index) => {
+      const status = book.status === "completed" ? "已完成" : "创作中";
+      const editHref = `${book.mode === "original" ? "/write" : "/studio"}?id=${encodeURIComponent(book.id)}`;
+      const progress = book.status === "completed" ? 100 : Math.min(90, Math.max(12, book.chapters.length * 15));
+      return <article className="library-book" key={book.id}>
+        <Link href={`/read?id=${encodeURIComponent(book.id)}`} className={`book-cover cover-${["rain", "star", "ivory", "red"][index % 4]}`}><span>{book.genre ?? (book.mode === "original" ? "原创作品" : "AI 共创")}</span><strong>{book.title}</strong><small>纸境</small></Link>
+        <div className="library-book-meta"><span>{status}</span><h2>{book.title}</h2><p>{book.chapters.length} 章 · {bookWordCount(book)} 字</p><div className="progress-line"><i style={{ width: `${progress}%` }} /></div><small>{new Date(book.updatedAt).toLocaleDateString("zh-CN")} 更新</small><div><Link href={editHref}>{book.status === "completed" ? "继续修改" : "继续创作"} →</Link></div></div>
+      </article>;
+    })}</section>}
+
+    {visibleBooks.length === 0 && <div className="empty-shelf"><span>＋</span><div><strong>{books.length ? "这里暂时没有符合条件的作品" : "下一本书，会从什么开始？"}</strong><p>{books.length ? "切换分类即可查看其他作品。" : "一句话、一个梦，或某个不愿忘记的人。"}</p></div><Link href="/studio">开始构思 →</Link></div>}
   </main></AppShell>;
 }

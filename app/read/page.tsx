@@ -3,29 +3,50 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "../../components/app-shell";
-
-const chapters = ["序章　没有雨的城市", "第一章　记忆匣", "第二章　红鞋女孩", "第三章　被擦去的街道", "第四章　旧日回声"];
+import { getBook, type StoredBook } from "../../lib/local-books";
 
 export default function ReadPage() {
   const [fontSize, setFontSize] = useState(18);
   const [chapterOpen, setChapterOpen] = useState(false);
-  useEffect(() => { window.localStorage.setItem("eidolon-reading-progress", "雨城来信:2"); }, []);
+  const [book, setBook] = useState<StoredBook | null>(null);
+  const [chapterIndex, setChapterIndex] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      const savedBook = params.get("id") ? getBook(params.get("id")!) : undefined;
+      setBook(savedBook ?? null);
+      const savedProgress = savedBook ? Number(window.localStorage.getItem(`eidolon-reading-${savedBook.id}`)) : 0;
+      if (savedBook?.chapters[savedProgress]) setChapterIndex(savedProgress);
+      setLoaded(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  function selectChapter(index: number) {
+    setChapterIndex(index);
+    setChapterOpen(false);
+    if (book) window.localStorage.setItem(`eidolon-reading-${book.id}`, String(index));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  if (!loaded) return <AppShell><main className="reader-page"><div className="empty-shelf"><div><strong>正在翻开作品……</strong></div></div></main></AppShell>;
+  if (!book || book.chapters.length === 0) return <AppShell><main className="reader-page"><div className="empty-shelf"><div><strong>还没有可以阅读的正文</strong><p>请先从创作页保存至少一个章节。</p></div><Link href="/library">返回书架 →</Link></div></main></AppShell>;
+
+  const chapter = book.chapters[chapterIndex] ?? book.chapters[0];
+  const editHref = `${book.mode === "original" ? "/write" : "/studio"}?id=${encodeURIComponent(book.id)}`;
+  const progress = Math.round(((chapterIndex + 1) / book.chapters.length) * 100);
+  const paragraphs = chapter.content.split(/\n\s*\n/).filter(Boolean);
+
   return <AppShell><main className="reader-page">
-    <div className="reader-toolbar"><button onClick={() => setChapterOpen(!chapterOpen)}>☰　目录</button><span>雨城来信</span><div><button onClick={() => setFontSize(Math.max(15, fontSize - 1))}>字−</button><button onClick={() => setFontSize(Math.min(24, fontSize + 1))}>字＋</button><Link href="/studio">回到创作</Link></div></div>
-    {chapterOpen && <aside className="chapter-drawer"><p className="eyebrow">章节目录</p><h2>雨城来信</h2>{chapters.map((chapter, index) => <button className={index === 1 ? "active" : ""} key={chapter}><span>{String(index).padStart(2, "0")}</span>{chapter}</button>)}</aside>}
+    <div className="reader-toolbar"><button onClick={() => setChapterOpen(!chapterOpen)}>☰　目录</button><span>{book.title}</span><div><button onClick={() => setFontSize(Math.max(15, fontSize - 1))}>字−</button><button onClick={() => setFontSize(Math.min(24, fontSize + 1))}>字＋</button><Link href={editHref}>回到创作</Link></div></div>
+    {chapterOpen && <aside className="chapter-drawer"><p className="eyebrow">章节目录</p><h2>{book.title}</h2>{book.chapters.map((item, index) => <button className={index === chapterIndex ? "active" : ""} onClick={() => selectChapter(index)} key={item.id}><span>{String(index + 1).padStart(2, "0")}</span>{item.title}</button>)}</aside>}
     <article className="reading-paper" style={{ fontSize }}>
-      <header><span>第一章</span><h1>记忆匣</h1><p>雨城来信 · 中篇小说</p></header>
-      <p>雨从凌晨开始落，到了中午，街上的人已经忘记了晴天是什么样子。</p>
-      <p>林默撑着伞走过长街。雨水沿着伞骨滑下来，在他脚边汇成细小的河流。街对面的钟楼停在十一点四十七分，那是城里所有时钟共同选择的沉默。</p>
-      <p>记忆典当行藏在一条没有名字的巷子里。门楣很低，木牌被雨水洗得发白，只剩下一个模糊的“忆”字。林默推门进去，铜铃没有响。</p>
-      <p>柜台上放着一只从未见过的匣子。</p>
-      <p>它比寻常的记忆匣更小，表面没有编号，也没有典当人的姓名。林默戴上手套，将它转到光下，看见底部刻着一行几乎消失的小字。</p>
-      <blockquote>给那个没有童年的人。</blockquote>
-      <p>他站了很久。窗外的雨声渐渐远去，像有人隔着许多年，轻轻敲打另一扇窗。</p>
-      <p>匣子里忽然传来一个孩子的笑声。</p>
-      <p>那声音与他昨夜梦里的一模一样。</p>
-      <footer><span>本章完</span><div><button>← 序章</button><button>第二章 →</button></div></footer>
+      <header><span>第 {chapterIndex + 1} 章</span><h1>{chapter.title}</h1><p>{book.title} · {book.status === "completed" ? "已完成" : "创作中"}</p></header>
+      {paragraphs.map((paragraph, index) => <p key={`${chapter.id}-${index}`}>{paragraph}</p>)}
+      <footer><span>本章完</span><div><button disabled={chapterIndex === 0} onClick={() => selectChapter(chapterIndex - 1)}>← 上一章</button><button disabled={chapterIndex === book.chapters.length - 1} onClick={() => selectChapter(chapterIndex + 1)}>下一章 →</button></div></footer>
     </article>
-    <div className="reading-progress"><i /><span>阅读进度 18%</span></div>
+    <div className="reading-progress"><i style={{ width: `${progress}%` }} /><span>阅读进度 {progress}%</span></div>
   </main></AppShell>;
 }

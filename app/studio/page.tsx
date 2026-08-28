@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../../components/app-shell";
+import { createLocalId, getBook, saveBook, type BookStatus, type StoredChapter } from "../../lib/local-books";
 import { GENRES, IDEAS as FALLBACK_IDEAS } from "../../lib/mock-data";
 
 type Stage = "brief" | "ideas" | "outline" | "chapter";
@@ -29,6 +30,10 @@ export default function StudioPage() {
   const [selectedIdea, setSelectedIdea] = useState(0);
   const [outline, setOutline] = useState<Outline | null>(null);
   const [chapter, setChapter] = useState("");
+  const [bookId, setBookId] = useState("");
+  const [chapters, setChapters] = useState<StoredChapter[]>([]);
+  const [chapterId, setChapterId] = useState("");
+  const [chapterTitle, setChapterTitle] = useState("第一章");
   const [instruction, setInstruction] = useState("写出第一章开场，建立人物处境并留下悬念。");
   const [companionQuestion, setCompanionQuestion] = useState("");
   const [companionReply, setCompanionReply] = useState("");
@@ -44,6 +49,25 @@ export default function StudioPage() {
       const queryGenre = params.get("genre");
       if (queryGenre) setGenre(queryGenre);
       if (params.get("idea") === "rain") setThought("一座不下雨的城市里，只有一把遗失的黑伞是湿的。");
+      const savedBook = params.get("id") ? getBook(params.get("id")!) : undefined;
+      if (savedBook?.mode === "ai") {
+        setBookId(savedBook.id);
+        setGenre(savedBook.genre ?? "悬疑推理");
+        setLength(savedBook.length ?? "中篇");
+        setStyle(savedBook.style ?? "雨夜独白");
+        setThought(savedBook.thought ?? "");
+        if (savedBook.idea) setIdeas([savedBook.idea]);
+        setOutline(savedBook.outline ?? null);
+        setChapters(savedBook.chapters);
+        const lastChapter = savedBook.chapters.at(-1);
+        if (lastChapter) {
+          setChapterId(lastChapter.id);
+          setChapterTitle(lastChapter.title);
+          setChapter(lastChapter.content);
+        }
+        setStage("chapter");
+        return;
+      }
       const draft = window.localStorage.getItem("paper-realm-ai-draft");
       if (draft && !params.toString()) {
         const parsed = JSON.parse(draft);
@@ -89,7 +113,11 @@ export default function StudioPage() {
   async function generateChapter() {
     setLoading(true); setError("");
     try {
-      const result = await callAgent<string>("chapter", { genre, length, style, thought, idea: ideas[selectedIdea], outline, instruction });
+      const result = await callAgent<string>("chapter", {
+        genre, length, style, thought, idea: ideas[selectedIdea], outline, instruction,
+        chapterNumber: chapters.length + (chapterId ? 0 : 1),
+        previousChapter: chapters.at(-1)?.content,
+      });
       setChapter(result.data); setModel(result.model); setStage("chapter");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "生成失败"); }
     finally { setLoading(false); }
@@ -120,6 +148,53 @@ export default function StudioPage() {
       setCompanionReply(payload.suggestion); setModel(payload.model ?? model); setCompanionQuestion("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "询问失败"); }
     finally { setLoading(false); }
+  }
+
+  function persistBook(status: BookStatus, continueWriting = false) {
+    if (!chapter.trim()) { setError("请先写下本章正文"); return; }
+    const now = new Date().toISOString();
+    const id = bookId || createLocalId("book");
+    const currentChapter: StoredChapter = {
+      id: chapterId || createLocalId("chapter"),
+      title: chapterTitle.trim() || `第${chapters.length + 1}章`,
+      content: chapter.trim(),
+      updatedAt: now,
+    };
+    const chapterIndex = chapters.findIndex((item) => item.id === currentChapter.id);
+    const nextChapters = chapterIndex === -1
+      ? [...chapters, currentChapter]
+      : chapters.map((item) => item.id === currentChapter.id ? currentChapter : item);
+    const existing = getBook(id);
+
+    saveBook({
+      id,
+      mode: "ai",
+      title: ideas[selectedIdea]?.title?.trim() || "未命名作品",
+      genre,
+      length,
+      style,
+      thought,
+      idea: ideas[selectedIdea],
+      outline: outline ?? undefined,
+      status,
+      chapters: nextChapters,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    });
+    setBookId(id);
+    setChapters(nextChapters);
+    setChapterId(currentChapter.id);
+    setSaved(true);
+    setError("");
+
+    if (status === "completed") {
+      window.location.href = "/library";
+    } else if (continueWriting) {
+      setChapter("");
+      setChapterId("");
+      setChapterTitle(`第${nextChapters.length + 1}章`);
+      setInstruction("承接上一章继续推进情节，并在结尾留下新的悬念。");
+    }
   }
 
   return (
@@ -173,9 +248,15 @@ export default function StudioPage() {
 
           {stage === "chapter" && <div className="chapter-stage reveal">
             <div className="chapter-toolbar"><div><span>正文草稿</span><strong>{chapter.length} 字</strong></div><button disabled={loading || !chapter} className="button button-small button-quiet" onClick={rewriteSelection}>润色选中文字</button></div>
+            <input className="chapter-title-input" aria-label="章节名称" value={chapterTitle} onChange={(event) => setChapterTitle(event.target.value)} />
             <textarea ref={chapterRef} value={chapter} onChange={(event) => setChapter(event.target.value)} placeholder="故事正在寻找它的下一句话。" aria-label="章节正文" />
             <div className="chapter-instruction"><label htmlFor="rewrite-instruction">生成或改写要求</label><input id="rewrite-instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} /></div>
-            <div className="studio-actions"><button className="button button-ghost" onClick={() => setStage("outline")}>返回大纲</button><button disabled={loading} className="button button-primary" onClick={generateChapter}>{loading ? "正在生成…" : "按要求重新生成"}</button></div>
+            <div className="studio-actions">
+              <button disabled={loading} className="button button-ghost" onClick={generateChapter}>{loading ? "正在生成…" : chapter ? "按要求重新生成" : "生成本章"}</button>
+              <button className="button button-quiet" onClick={() => persistBook("writing")}>保存到书架</button>
+              <button className="button button-quiet" onClick={() => persistBook("writing", true)}>保存并写下一章</button>
+              <button className="button button-primary" onClick={() => persistBook("completed")}>完成作品</button>
+            </div>
           </div>}
         </section>
 
