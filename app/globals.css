@@ -69,8 +69,8 @@ a { color: inherit; text-decoration: none; }
 .brand-glyph {
   display: grid; place-items: center; width: 38px; height: 38px;
   border: 1px solid var(--accent); border-radius: 50%; color: var(--accent);
-  font: 600 17px "Songti SC", serif;
 }
+.brand-mark { width: 25px; height: 25px; background: currentColor; -webkit-mask: url("/paper-realm-logo.svg") center/contain no-repeat; mask: url("/paper-realm-logo.svg") center/contain no-repeat; }
 .brand > span:last-child { display: flex; flex-direction: column; }
 .brand strong { font: 600 19px/1.1 Georgia, serif; letter-spacing: .06em; }
 .brand small { margin-top: 4px; color: var(--muted); font-size: 10px; letter-spacing: .18em; }
@@ -99,7 +99,7 @@ a { color: inherit; text-decoration: none; }
 .home-page { padding: 70px 0 100px; }
 .hero-grid { display: grid; grid-template-columns: 1.08fr .72fr; align-items: center; gap: clamp(48px, 8vw, 120px); min-height: 570px; }
 .eyebrow { margin: 0 0 18px; color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .28em; text-transform: uppercase; }
-.hero-copy h1 { margin: 0; font-size: clamp(54px, 7vw, 96px); font-weight: 500; line-height: 1.06; letter-spacing: -.045em; }
+.hero-copy h1 { margin: 0; font-size: clamp(42px, 5.5vw, 72px); font-weight: 500; line-height: 1.06; letter-spacing: -.045em; }
 .hero-copy h1 em { color: var(--accent); font-weight: 400; }
 .hero-lead { max-width: 620px; margin: 30px 0 0; color: var(--muted); font-size: 17px; line-height: 2; letter-spacing: .04em; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 38px; }
@@ -213,6 +213,7 @@ button:disabled { cursor: wait; opacity: .58; transform: none !important; }
 /* Library */
 .library-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 44px; border-bottom: 1px solid var(--line); }.filter-tabs { display: flex; gap: 32px; }.filter-tabs button { position: relative; padding: 16px 0; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 13px; }.filter-tabs button.active { color: var(--ink); }.filter-tabs button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); }
 .library-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 50px 7vw; }.library-book { display: grid; grid-template-columns: 150px 1fr; align-items: end; gap: 28px; }.library-book-meta > span { color: var(--accent); font-size: 10px; letter-spacing: .15em; }.library-book-meta h2 { margin: 12px 0 8px; font-size: 23px; font-weight: 500; }.library-book-meta p, .library-book-meta small { color: var(--muted); font-size: 11px; }.progress-line { height: 2px; margin: 22px 0 9px; background: var(--line); }.progress-line i { display: block; height: 100%; background: var(--accent); }
+.library-book-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 11px; }.library-book-actions a { margin-right: auto; }.library-book-actions button { padding: 0; border: 0; color: var(--muted); background: transparent; cursor: pointer; }.library-book-actions button:hover { color: var(--accent); }
 .empty-shelf { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 22px; margin-top: 80px; padding: 30px; border: 1px dashed var(--line); color: var(--muted); }.empty-shelf > span { font-size: 30px; color: var(--gold); }.empty-shelf strong { color: var(--ink); font-weight: 500; }.empty-shelf p { margin: 6px 0 0; font-size: 12px; }.empty-shelf a { color: var(--accent); font-size: 12px; }
 
 /* Reader */
@@ -231,7 +232,7 @@ button:disabled { cursor: wait; opacity: .58; transform: none !important; }
   .writer-page { grid-template-columns: 1fr; }.companion-panel { position: static; height: auto; margin: 0 5vw 85px; border: 1px solid var(--line); }.companion-compose { position: static; margin-top: 24px; }
 }
 @media (max-width: 620px) {
-  .topbar { min-height: 66px; }.brand small { display: none; }.home-page { padding-top: 45px; }.hero-grid { gap: 44px; }.hero-copy h1 { font-size: 48px; }.quote-strip { margin-bottom: 85px; }.section-block { margin-bottom: 90px; }.section-heading, .page-heading { display: block; }.section-heading > p, .page-heading p:last-child { margin-top: 18px; }.genre-grid { grid-template-columns: 1fr; }.genre-card { min-height: 235px; }.book-row { grid-template-columns: 1fr; }.book-card { grid-template-columns: 130px 1fr; }.site-footer { display: block; text-align: center; }.site-footer p { margin: 10px 0; }
+  .topbar { min-height: 66px; }.brand small { display: none; }.home-page { padding-top: 45px; }.hero-grid { gap: 44px; }.hero-copy h1 { font-size: 40px; }.quote-strip { margin-bottom: 85px; }.section-block { margin-bottom: 90px; }.section-heading, .page-heading { display: block; }.section-heading > p, .page-heading p:last-child { margin-top: 18px; }.genre-grid { grid-template-columns: 1fr; }.genre-card { min-height: 235px; }.book-row { grid-template-columns: 1fr; }.book-card { grid-template-columns: 130px 1fr; }.site-footer { display: block; text-align: center; }.site-footer p { margin: 10px 0; }
   .studio-canvas { padding: 40px 5vw 70px; }.studio-header { display: block; }.save-state { display: block; margin-top: 10px; }.choice-grid { grid-template-columns: 1fr 1fr; }.form-pair, .outline-grid { grid-template-columns: 1fr; }.outline-grid .wide { grid-column: auto; }.studio-actions { align-items: stretch; flex-direction: column-reverse; }.act { grid-template-columns: 1fr; gap: 8px; }.library-toolbar { align-items: end; }.filter-tabs { gap: 16px; overflow-x: auto; }.library-book { grid-template-columns: 115px 1fr; gap: 20px; }.empty-shelf { grid-template-columns: auto 1fr; }.empty-shelf a { grid-column: 2; }.reader-toolbar { grid-template-columns: auto 1fr; }.reader-toolbar > span { text-align: right; }.reader-toolbar > div { grid-column: 1 / -1; justify-self: stretch; justify-content: space-between; padding-top: 10px; }.reading-paper { width: min(86vw, 620px); padding-top: 65px; }
   .chapter-instruction { grid-template-columns: 1fr; gap: 8px; }.writer-paper { width: 90%; padding-top: 38px; }.writer-header { display: block; }.writer-header input { width: 100%; }.writer-status { flex-direction: row; justify-content: space-between; margin-top: 18px; text-align: left; }.original-editor { min-height: 58vh; }
 }

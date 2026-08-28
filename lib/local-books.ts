@@ -60,3 +60,34 @@ export function saveBook(book: StoredBook) {
 export function bookWordCount(book: StoredBook) {
   return book.chapters.reduce((total, chapter) => total + chapter.content.length, 0);
 }
+
+export type BookDownloadFormat = "txt" | "md";
+
+function safeFileName(title: string) {
+  return title.replace(/[\\/:*?"<>|]/g, "-").trim() || "未命名作品";
+}
+
+function renderBook(book: StoredBook, format: BookDownloadFormat) {
+  const status = book.status === "completed" ? "已完成" : "创作中";
+  const divider = "=".repeat(32);
+  if (format === "md") {
+    const chapters = book.chapters.map((chapter) => `## ${chapter.title}\n\n${chapter.content}`).join("\n\n---\n\n");
+    return `# ${book.title}\n\n- 状态：${status}\n- 章节：${book.chapters.length}\n- 字数：${bookWordCount(book)}\n\n${chapters}\n`;
+  }
+
+  const chapters = book.chapters.map((chapter) => `${chapter.title}\n\n${chapter.content}`).join(`\n\n${divider}\n\n`);
+  return `${book.title}\n\n状态：${status}\n章节：${book.chapters.length}\n字数：${bookWordCount(book)}\n\n${divider}\n\n${chapters}\n`;
+}
+
+export function downloadBook(book: StoredBook, format: BookDownloadFormat) {
+  const content = renderBook(book, format);
+  const blob = new Blob([format === "txt" ? `\uFEFF${content}` : content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${safeFileName(book.title)}.${format}`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}

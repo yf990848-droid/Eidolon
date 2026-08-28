@@ -34,7 +34,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="site-shell">
       <header className="topbar">
         <Link href="/" className="brand" aria-label="纸境首页">
-          <span className="brand-glyph">纸</span>
+          <span className="brand-glyph" aria-hidden="true"><span className="brand-mark" /></span>
           <span><strong>纸境</strong><small>EIDOLON</small></span>
         </Link>
         <nav className="main-nav" aria-label="主要导航">

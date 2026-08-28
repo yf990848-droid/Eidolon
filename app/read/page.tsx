@@ -3,20 +3,25 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "../../components/app-shell";
-import { getBook, type StoredBook } from "../../lib/local-books";
+import { bookWordCount, getBook, loadBooks, type StoredBook } from "../../lib/local-books";
 
 export default function ReadPage() {
   const [fontSize, setFontSize] = useState(18);
   const [chapterOpen, setChapterOpen] = useState(false);
   const [book, setBook] = useState<StoredBook | null>(null);
+  const [completedBooks, setCompletedBooks] = useState<StoredBook[]>([]);
+  const [requestedId, setRequestedId] = useState<string | null>(null);
   const [chapterIndex, setChapterIndex] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const params = new URLSearchParams(window.location.search);
-      const savedBook = params.get("id") ? getBook(params.get("id")!) : undefined;
+      const id = params.get("id");
+      const savedBook = id ? getBook(id) : undefined;
+      setRequestedId(id);
       setBook(savedBook ?? null);
+      if (!id) setCompletedBooks(loadBooks().filter((item) => item.status === "completed"));
       const savedProgress = savedBook ? Number(window.localStorage.getItem(`eidolon-reading-${savedBook.id}`)) : 0;
       if (savedBook?.chapters[savedProgress]) setChapterIndex(savedProgress);
       setLoaded(true);
@@ -32,6 +37,13 @@ export default function ReadPage() {
   }
 
   if (!loaded) return <AppShell><main className="reader-page"><div className="empty-shelf"><div><strong>正在翻开作品……</strong></div></div></main></AppShell>;
+  if (!requestedId) return <AppShell><main className="page inner-page library-page">
+    <header className="page-heading"><div><p className="eyebrow">纸境阅读</p><h1>线上作品</h1></div><p>当前同步展示书架中所有已经完成的作品。</p></header>
+    {completedBooks.length > 0 ? <section className="library-grid">{completedBooks.map((item, index) => <article className="library-book" key={item.id}>
+      <Link href={`/read?id=${encodeURIComponent(item.id)}`} className={`book-cover cover-${["rain", "star", "ivory", "red"][index % 4]}`}><span>{item.genre ?? (item.mode === "original" ? "原创作品" : "AI 共创")}</span><strong>{item.title}</strong><small>纸境</small></Link>
+      <div className="library-book-meta"><span>已完成</span><h2>{item.title}</h2><p>{item.chapters.length} 章 · {bookWordCount(item)} 字</p><Link href={`/read?id=${encodeURIComponent(item.id)}`}>开始阅读 →</Link></div>
+    </article>)}</section> : <div className="empty-shelf"><span>＋</span><div><strong>还没有已完成的作品</strong><p>完成一本作品后，它会自动出现在这里。</p></div><Link href="/library">返回书架 →</Link></div>}
+  </main></AppShell>;
   if (!book || book.chapters.length === 0) return <AppShell><main className="reader-page"><div className="empty-shelf"><div><strong>还没有可以阅读的正文</strong><p>请先从创作页保存至少一个章节。</p></div><Link href="/library">返回书架 →</Link></div></main></AppShell>;
 
   const chapter = book.chapters[chapterIndex] ?? book.chapters[0];
