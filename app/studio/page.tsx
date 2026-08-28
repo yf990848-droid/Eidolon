@@ -182,6 +182,7 @@ export default function StudioPage() {
       updatedAt: now,
     });
     setBookId(id);
+    window.history.replaceState(null, "", `/studio?id=${encodeURIComponent(id)}`);
     setChapters(nextChapters);
     setChapterId(currentChapter.id);
     setSaved(true);

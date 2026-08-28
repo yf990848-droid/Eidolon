@@ -106,6 +106,7 @@ export default function OriginalWritingPage() {
       updatedAt: now,
     });
     setBookId(id);
+    window.history.replaceState(null, "", `/write?id=${encodeURIComponent(id)}`);
     setChapters(nextChapters);
     setChapterId(currentChapter.id);
     setError("");
