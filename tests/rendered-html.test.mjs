@@ -88,4 +88,14 @@ test("supports short story and chapter outline agent tasks", async () => {
   assert.equal(outlineResponse.status, 200);
   const outlinePayload = await outlineResponse.json();
   assert.equal(outlinePayload.data.chapters.length, 10);
+
+  const memoryResponse = await worker.fetch(new Request("http://localhost/api/agent", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ task: "memory-update", input: { chapterNumber: 2, chapter: "本章正文" } }),
+  }), env, context);
+  assert.equal(memoryResponse.status, 200);
+  const memoryPayload = await memoryResponse.json();
+  assert.equal(memoryPayload.data.memory.updatedThroughChapter, 2);
+  assert.deepEqual(memoryPayload.data.issues, []);
 });

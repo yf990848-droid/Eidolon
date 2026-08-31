@@ -2,7 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../../components/app-shell";
-import { createLocalId, getBook, saveBook, type BookStatus, type StoredChapter, type StoredChapterOutline } from "../../lib/local-books";
+import {
+  createLocalId,
+  getBook,
+  saveBook,
+  type BookStatus,
+  type ConsistencyIssue,
+  type NovelMemory,
+  type StoredBook,
+  type StoredChapter,
+  type StoredChapterOutline,
+} from "../../lib/local-books";
 import { GENRES, IDEAS as FALLBACK_IDEAS } from "../../lib/mock-data";
 import {
   AUTHOR_STYLE_PROFILES,
@@ -16,6 +26,11 @@ import {
 type Stage = "brief" | "ideas" | "outline" | "chapter-outline" | "chapter";
 type Idea = { label: string; title: string; summary: string; sample: string };
 type Outline = { premise: string; tone: string; acts: Array<{ title: string; summary: string }> };
+type MemoryUpdateResult = {
+  chapterSummary: string;
+  memory: NovelMemory;
+  issues: ConsistencyIssue[];
+};
 
 async function callAgent<T>(task: string, input: Record<string, unknown>): Promise<{ data: T; model: string }> {
   const response = await fetch("/api/agent", {
@@ -45,6 +60,8 @@ export default function StudioPage() {
   const [chapter, setChapter] = useState("");
   const [bookId, setBookId] = useState("");
   const [chapters, setChapters] = useState<StoredChapter[]>([]);
+  const [memory, setMemory] = useState<NovelMemory>();
+  const [consistencyIssues, setConsistencyIssues] = useState<ConsistencyIssue[]>([]);
   const [chapterId, setChapterId] = useState("");
   const [chapterTitle, setChapterTitle] = useState("第一章");
   const [instruction, setInstruction] = useState("写出第一章开场，建立人物处境并留下悬念。");
@@ -86,6 +103,7 @@ export default function StudioPage() {
         setChapterCount(savedBook.chapterCount ?? (savedBook.length === "短篇" ? 1 : Math.max(savedBook.chapters.length, savedBook.length === "长篇" ? 20 : 8)));
         setChapterOutlines(savedBook.chapterOutlines ?? []);
         setChapters(savedBook.chapters);
+        setMemory(savedBook.memory);
         const lastChapter = savedBook.chapters.at(-1);
         if (lastChapter) {
           setChapterId(lastChapter.id);
@@ -210,6 +228,7 @@ export default function StudioPage() {
         chapterCount,
         chapterNumber,
         chapterOutline: plan,
+        memory,
         previousChapter: chapters[chapterNumber - 2]?.content,
       });
       setChapter(result.data);
@@ -250,7 +269,7 @@ export default function StudioPage() {
     finally { setLoading(false); }
   }
 
-  function persistBook(status: BookStatus, continueWriting = false) {
+  async function persistBook(status: BookStatus, continueWriting = false) {
     if (!chapter.trim()) { setError("请先写下本章正文"); return; }
     const now = new Date().toISOString();
     const id = bookId || createLocalId("book");
@@ -264,9 +283,9 @@ export default function StudioPage() {
     const nextChapters = chapterIndex === -1
       ? [...chapters, currentChapter]
       : chapters.map((item) => item.id === currentChapter.id ? currentChapter : item);
+    const savedChapterNumber = chapterIndex === -1 ? nextChapters.length : chapterIndex + 1;
     const existing = getBook(id);
-
-    saveBook({
+    const baseBook: StoredBook = {
       id,
       mode: "ai",
       title: ideas[selectedIdea]?.title?.trim() || "未命名作品",
@@ -280,11 +299,14 @@ export default function StudioPage() {
       outline: outline ?? undefined,
       chapterCount,
       chapterOutlines: length === "长篇" ? chapterOutlines : undefined,
+      memory,
       status,
       chapters: nextChapters,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-    });
+    };
+
+    saveBook(baseBook);
     setBookId(id);
     window.history.replaceState(null, "", `/studio?id=${encodeURIComponent(id)}`);
     setChapters(nextChapters);
@@ -292,10 +314,48 @@ export default function StudioPage() {
     setSaved(true);
     setError("");
 
-    if (status === "completed") {
+    let memoryUpdated = true;
+    let finalChapters = nextChapters;
+    if (length !== "短篇") {
+      setLoading(true);
+      try {
+        const result = await callAgent<MemoryUpdateResult>("memory-update", {
+          outline,
+          chapterOutline: length === "长篇" ? chapterOutlines[savedChapterNumber - 1] : undefined,
+          memory,
+          chapterNumber: savedChapterNumber,
+          chapter: currentChapter.content,
+        });
+        if (!result.data.memory || !Array.isArray(result.data.issues)) throw new Error("小说记忆格式不完整");
+        finalChapters = nextChapters.map((item) => item.id === currentChapter.id
+          ? { ...item, summary: result.data.chapterSummary || item.summary }
+          : item);
+        const updatedBook: StoredBook = {
+          ...baseBook,
+          chapters: finalChapters,
+          memory: result.data.memory,
+          updatedAt: new Date().toISOString(),
+        };
+        saveBook(updatedBook);
+        setChapters(finalChapters);
+        setMemory(result.data.memory);
+        setConsistencyIssues(result.data.issues);
+        setModel(result.model);
+      } catch (cause) {
+        memoryUpdated = false;
+        const message = cause instanceof Error ? cause.message : "更新失败";
+        setError(`正文已保存，但小说记忆更新失败：${message}`);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      setConsistencyIssues([]);
+    }
+
+    if (status === "completed" && memoryUpdated) {
       window.location.href = "/library";
-    } else if (continueWriting) {
-      const nextNumber = nextChapters.length + 1;
+    } else if (continueWriting && memoryUpdated) {
+      const nextNumber = finalChapters.length + 1;
       const nextPlan = length === "长篇" ? chapterOutlines[nextNumber - 1] : undefined;
       setChapter("");
       setChapterId("");
@@ -388,9 +448,9 @@ export default function StudioPage() {
             <div className="chapter-instruction"><label htmlFor="rewrite-instruction">生成或改写要求</label><input id="rewrite-instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} /></div>
             <div className="studio-actions">
               <button disabled={loading} className="button button-ghost" onClick={generateChapter}>{loading ? "正在生成…" : chapter ? "按要求重新生成" : "生成本章"}</button>
-              <button className="button button-quiet" onClick={() => persistBook("writing")}>保存到书架</button>
-              {canWriteNext && <button className="button button-quiet" onClick={() => persistBook("writing", true)}>保存并写下一章</button>}
-              <button className="button button-primary" onClick={() => persistBook("completed")}>完成作品</button>
+              <button disabled={loading} className="button button-quiet" onClick={() => void persistBook("writing")}>保存到书架</button>
+              {canWriteNext && <button disabled={loading} className="button button-quiet" onClick={() => void persistBook("writing", true)}>保存并写下一章</button>}
+              <button disabled={loading} className="button button-primary" onClick={() => void persistBook("completed")}>完成作品</button>
             </div>
           </div>}
         </section>
@@ -398,6 +458,8 @@ export default function StudioPage() {
         <aside className="agent-panel">
           <div className="agent-heading"><span className="agent-orb">✦</span><div><strong>写作伴侣</strong><small>{model}</small></div></div>
           <div className="agent-message"><p>{companionReply || (stage === "brief" ? "告诉我你想写什么。不完整的念头也很好。" : "我会回答你的具体问题，但故事的选择始终属于你。")}</p></div>
+          {memory && <div className="agent-message"><p>小说记忆已更新至第 {memory.updatedThroughChapter} 章。</p></div>}
+          {consistencyIssues.length > 0 && <div className="agent-message" role="status"><p><strong>一致性提醒</strong><br />{consistencyIssues.map((issue, index) => <span key={index}>{issue.description} 建议：{issue.suggestion}<br /></span>)}</p></div>}
           <div className="style-card"><span>当前文风</span><strong>{style}</strong><p>{styleInstruction}</p><a href="/styles">查看文风库</a></div>
           <div className="agent-input"><input value={companionQuestion} onChange={(event) => setCompanionQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void askCompanion(); }} aria-label="询问写作伴侣" placeholder="问问写作伴侣……" /><button disabled={loading} onClick={askCompanion} aria-label="发送">↑</button></div>
         </aside>

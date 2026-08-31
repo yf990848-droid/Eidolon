@@ -5,7 +5,29 @@ export type StoredChapter = {
   id: string;
   title: string;
   content: string;
+  summary?: string;
   updatedAt: string;
+};
+
+export type ConsistencyIssue = {
+  category: "character" | "timeline" | "world" | "plot";
+  description: string;
+  suggestion: string;
+};
+
+export type NovelMemory = {
+  storySummary: string;
+  characters: Array<{
+    name: string;
+    state: string;
+    relationships: string[];
+  }>;
+  worldRules: string[];
+  timeline: string[];
+  openForeshadows: string[];
+  resolvedForeshadows: string[];
+  unresolvedConflicts: string[];
+  updatedThroughChapter: number;
 };
 
 export type StoredChapterOutline = {
@@ -31,6 +53,7 @@ export type StoredBook = {
   outline?: { premise: string; tone: string; acts: Array<{ title: string; summary: string }> };
   chapterCount?: number;
   chapterOutlines?: StoredChapterOutline[];
+  memory?: NovelMemory;
   status: BookStatus;
   chapters: StoredChapter[];
   createdAt: string;

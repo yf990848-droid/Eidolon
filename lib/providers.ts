@@ -110,6 +110,26 @@ export class MockTextProvider implements TextModelProvider {
     if (request.system.includes("TASK:rewrite")) {
       return { model: "paper-realm-mock", content: "雨从黄昏落到夜里。林默推门时，铜铃沉默着，柜台上却多了一只无名的玻璃瓶。" };
     }
+    if (request.system.includes("TASK:memory-update")) {
+      const chapterNumber = Math.max(1, Number(request.prompt.match(/\"chapterNumber\":(\d+)/)?.[1] ?? 1));
+      return {
+        model: "paper-realm-mock",
+        content: JSON.stringify({
+          chapterSummary: "林默在记忆典当行发现一只与自己童年有关的无名玻璃瓶。",
+          memory: {
+            storySummary: "林默开始追查一段可能属于自己的缺失记忆。",
+            characters: [{ name: "林默", state: "发现童年记忆线索并决定追查", relationships: [] }],
+            worldRules: ["记忆可以被玻璃瓶保存和典当"],
+            timeline: [`第${chapterNumber}章：林默发现无名记忆瓶。`],
+            openForeshadows: ["雪地尽头的门与林默的童年有关"],
+            resolvedForeshadows: [],
+            unresolvedConflicts: ["无名记忆瓶为何出现在柜台上"],
+            updatedThroughChapter: chapterNumber,
+          },
+          issues: [],
+        }),
+      };
+    }
     return { content: "我在。把你正在犹豫的句子或问题交给我，我只提供建议，决定权仍属于你。", model: "paper-realm-mock" };
   }
 }
