@@ -31,7 +31,7 @@ export default function LibraryPage() {
       const editHref = `${book.mode === "original" ? "/write" : "/studio"}?id=${encodeURIComponent(book.id)}`;
       const progress = book.status === "completed" ? 100 : Math.min(90, Math.max(12, book.chapters.length * 15));
       return <article className="library-book" key={book.id}>
-        <Link href={`/read?id=${encodeURIComponent(book.id)}`} className={`book-cover cover-${["rain", "star", "ivory", "red"][index % 4]}`}><span>{book.genre ?? (book.mode === "original" ? "原创作品" : "AI 共创")}</span><strong>{book.title}</strong><small>纸境</small></Link>
+        <Link href={`/read?id=${encodeURIComponent(book.id)}`} className={`book-cover cover-${["rain", "stars", "mountain", "harbor"][index % 4]}`}><span>{book.genre ?? (book.mode === "original" ? "原创作品" : "AI 共创")}</span><strong>{book.title}</strong><small>纸境</small></Link>
         <div className="library-book-meta"><span>{status}</span><h2>{book.title}</h2><p>{book.chapters.length} 章 · {bookWordCount(book)} 字</p><div className="progress-line"><i style={{ width: `${progress}%` }} /></div><small>{new Date(book.updatedAt).toLocaleDateString("zh-CN")} 更新</small><div className="library-book-actions"><Link href={editHref}>{book.status === "completed" ? "继续修改" : "继续创作"} →</Link><button onClick={() => downloadBook(book, "txt")}>TXT</button><button onClick={() => downloadBook(book, "md")}>Markdown</button></div></div>
       </article>;
     })}</section>}
