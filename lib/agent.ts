@@ -1,11 +1,13 @@
 import type { TextModelProvider } from "./providers";
 
-export type AgentTask = "idea" | "outline" | "chapter" | "rewrite";
+export type AgentTask = "style-analysis" | "idea" | "outline" | "chapter" | "rewrite";
 
 export type AgentInput = {
   genre?: string;
   length?: string;
   style?: string;
+  styleInstruction?: string;
+  referenceText?: string;
   thought?: string;
   idea?: { title?: string; summary?: string };
   outline?: unknown;
@@ -15,6 +17,7 @@ export type AgentInput = {
 };
 
 const SYSTEM_PROMPTS: Record<AgentTask, string> = {
+  "style-analysis": "TASK:style-analysis。你是纸境的文风分析编辑。只分析语言表达，不总结故事，不猜测作者，不复述原文，也不保留人名、地点或具体情节。只返回 JSON：{\"summary\":\"\",\"features\":{\"perspective\":\"\",\"rhythm\":\"\",\"sentenceStyle\":\"\",\"dialogue\":\"\",\"description\":\"\",\"emotion\":\"\",\"imagery\":\"\"},\"writingInstruction\":\"\"}。writingInstruction 必须是可复用的抽象写作指令，不得要求复制特定作者或原文措辞。",
   idea: "TASK:idea。你是纸境的小说策划编辑。只返回 JSON，格式为 {\"ideas\":[{\"label\":\"\",\"title\":\"\",\"summary\":\"\",\"sample\":\"\"}]}，必须恰好三个差异明确的原创方案。",
   outline: "TASK:outline。你是纸境的故事结构编辑。只返回 JSON，格式为 {\"premise\":\"\",\"tone\":\"\",\"acts\":[{\"title\":\"\",\"summary\":\"\"}]}，acts 必须恰好三幕。",
   chapter: "TASK:chapter。你是纸境的小说正文编辑。根据已确认信息写一段完整章节正文，不解释写作过程，不使用 Markdown 标题。",
@@ -34,13 +37,13 @@ export async function runAgent(provider: TextModelProvider, task: AgentTask, inp
   const result = await provider.generate({
     system: SYSTEM_PROMPTS[task],
     prompt: `以下是用户已经确认的创作信息，请严格基于它完成任务：\n${clipped(input)}`,
-    json: task === "idea" || task === "outline",
-    maxTokens: task === "chapter" ? 3600 : 2200,
+    json: task === "style-analysis" || task === "idea" || task === "outline",
+    maxTokens: task === "chapter" ? 3600 : task === "style-analysis" ? 1800 : 2200,
   });
 
   return {
     task,
-    data: task === "idea" || task === "outline" ? parseJson(result.content) : result.content,
+    data: task === "style-analysis" || task === "idea" || task === "outline" ? parseJson(result.content) : result.content,
     model: result.model,
     usage: result.usage,
   };

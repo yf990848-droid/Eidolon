@@ -40,6 +40,24 @@ export interface ImageModelProvider {
  */
 export class MockTextProvider implements TextModelProvider {
   async generate(request: TextGenerationRequest): Promise<TextGenerationResult> {
+    if (request.system.includes("TASK:style-analysis")) {
+      return {
+        model: "paper-realm-mock",
+        content: JSON.stringify({
+          summary: "清冷克制，以中短句推进叙事，通过环境细节映照人物没有说出口的情绪。",
+          features: {
+            perspective: "贴近人物的有限视角",
+            rhythm: "舒缓中带有短暂停顿",
+            sentenceStyle: "中短句交替，较少解释",
+            dialogue: "对话简洁，重视潜台词",
+            description: "选择性描写光线、声音和小动作",
+            emotion: "克制、安静，略带惆怅",
+            imagery: "雨、窗、灯与旧物",
+          },
+          writingInstruction: "使用克制的中短句，以环境细节和人物动作呈现心理；减少直接解释，让情绪通过停顿、对话潜台词和反复意象自然显现。",
+        }),
+      };
+    }
     if (request.system.includes("TASK:idea")) {
       return {
         model: "paper-realm-mock",

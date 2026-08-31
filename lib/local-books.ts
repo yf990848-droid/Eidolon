@@ -15,6 +15,8 @@ export type StoredBook = {
   genre?: string;
   length?: string;
   style?: string;
+  styleId?: string;
+  styleInstruction?: string;
   thought?: string;
   idea?: { label: string; title: string; summary: string; sample: string };
   outline?: { premise: string; tone: string; acts: Array<{ title: string; summary: string }> };

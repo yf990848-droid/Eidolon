@@ -10,7 +10,7 @@ const THEMES: Array<{ id: ThemeName; name: string }> = [
 ];
 const NAV = [
   { href: "/", label: "今日" }, { href: "/studio", label: "AI 共创" }, { href: "/write", label: "原创写作" },
-  { href: "/library", label: "书架" }, { href: "/read", label: "阅读" },
+  { href: "/styles", label: "文风库" }, { href: "/library", label: "书架" }, { href: "/read", label: "阅读" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

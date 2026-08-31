@@ -4,6 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../../components/app-shell";
 import { createLocalId, getBook, saveBook, type BookStatus, type StoredChapter } from "../../lib/local-books";
 import { GENRES, IDEAS as FALLBACK_IDEAS } from "../../lib/mock-data";
+import {
+  AUTHOR_STYLE_PROFILES,
+  BUILT_IN_STYLE_PROFILES,
+  SYSTEM_STYLE_PROFILES,
+  findStyleProfileByName,
+  loadStyleProfiles,
+  type StyleProfile,
+} from "../../lib/style-profiles";
 
 type Stage = "brief" | "ideas" | "outline" | "chapter";
 type Idea = { label: string; title: string; summary: string; sample: string };
@@ -25,6 +33,9 @@ export default function StudioPage() {
   const [genre, setGenre] = useState("悬疑推理");
   const [length, setLength] = useState("中篇");
   const [style, setStyle] = useState("雨夜独白");
+  const [styleId, setStyleId] = useState(SYSTEM_STYLE_PROFILES[0].id);
+  const [styleInstruction, setStyleInstruction] = useState(SYSTEM_STYLE_PROFILES[0].writingInstruction);
+  const [personalStyles, setPersonalStyles] = useState<StyleProfile[]>([]);
   const [thought, setThought] = useState("");
   const [ideas, setIdeas] = useState<Idea[]>(FALLBACK_IDEAS);
   const [selectedIdea, setSelectedIdea] = useState(0);
@@ -42,19 +53,31 @@ export default function StudioPage() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const chapterRef = useRef<HTMLTextAreaElement>(null);
+  const allStyles = useMemo(() => [...BUILT_IN_STYLE_PROFILES, ...personalStyles], [personalStyles]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const params = new URLSearchParams(window.location.search);
+      const savedStyles = loadStyleProfiles();
+      const availableStyles = [...BUILT_IN_STYLE_PROFILES, ...savedStyles];
+      setPersonalStyles(savedStyles);
+      const applyStyle = (name?: string, id?: string, instruction?: string) => {
+        const profile = availableStyles.find((item) => item.id === id) ?? findStyleProfileByName(name, savedStyles) ?? SYSTEM_STYLE_PROFILES[0];
+        setStyle(name ?? profile.name);
+        setStyleId(id ?? profile.id);
+        setStyleInstruction(instruction ?? profile.writingInstruction);
+      };
       const queryGenre = params.get("genre");
       if (queryGenre) setGenre(queryGenre);
       if (params.get("idea") === "rain") setThought("一座不下雨的城市里，只有一把遗失的黑伞是湿的。");
+      const queryStyle = params.get("style");
+      if (queryStyle) applyStyle(undefined, queryStyle);
       const savedBook = params.get("id") ? getBook(params.get("id")!) : undefined;
       if (savedBook?.mode === "ai") {
         setBookId(savedBook.id);
         setGenre(savedBook.genre ?? "悬疑推理");
         setLength(savedBook.length ?? "中篇");
-        setStyle(savedBook.style ?? "雨夜独白");
+        applyStyle(savedBook.style, savedBook.styleId, savedBook.styleInstruction);
         setThought(savedBook.thought ?? "");
         if (savedBook.idea) setIdeas([savedBook.idea]);
         setOutline(savedBook.outline ?? null);
@@ -73,7 +96,7 @@ export default function StudioPage() {
         const parsed = JSON.parse(draft);
         setGenre(parsed.genre ?? "悬疑推理");
         setLength(parsed.length ?? "中篇");
-        setStyle(parsed.style ?? "雨夜独白");
+        applyStyle(parsed.style, parsed.styleId, parsed.styleInstruction);
         setThought(parsed.thought ?? "");
         setChapter(parsed.chapter ?? "");
       }
@@ -82,11 +105,11 @@ export default function StudioPage() {
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem("paper-realm-ai-draft", JSON.stringify({ genre, length, style, thought, chapter }));
+    window.localStorage.setItem("paper-realm-ai-draft", JSON.stringify({ genre, length, style, styleId, styleInstruction, thought, chapter }));
     const showTimer = window.setTimeout(() => setSaved(true), 0);
     const hideTimer = window.setTimeout(() => setSaved(false), 1200);
     return () => { window.clearTimeout(showTimer); window.clearTimeout(hideTimer); };
-  }, [genre, length, style, thought, chapter]);
+  }, [genre, length, style, styleId, styleInstruction, thought, chapter]);
 
   const progress = useMemo(() => ({ brief: 1, ideas: 2, outline: 3, chapter: 5 })[stage], [stage]);
   const titles = { brief: "从哪里开始？", ideas: "选择故事的命运", outline: "搭起故事的骨骼", chapter: "写下故事的第一声呼吸" };
@@ -94,7 +117,7 @@ export default function StudioPage() {
   async function generateIdeas() {
     setLoading(true); setError("");
     try {
-      const result = await callAgent<{ ideas: Idea[] }>("idea", { genre, length, style, thought });
+      const result = await callAgent<{ ideas: Idea[] }>("idea", { genre, length, style, styleInstruction, thought });
       if (!Array.isArray(result.data.ideas) || result.data.ideas.length !== 3) throw new Error("创意方案格式不完整，请重试");
       setIdeas(result.data.ideas); setSelectedIdea(0); setModel(result.model); setStage("ideas");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "生成失败"); }
@@ -104,7 +127,7 @@ export default function StudioPage() {
   async function generateOutline() {
     setLoading(true); setError("");
     try {
-      const result = await callAgent<Outline>("outline", { genre, length, style, thought, idea: ideas[selectedIdea] });
+      const result = await callAgent<Outline>("outline", { genre, length, style, styleInstruction, thought, idea: ideas[selectedIdea] });
       setOutline(result.data); setModel(result.model); setStage("outline");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "生成失败"); }
     finally { setLoading(false); }
@@ -114,7 +137,7 @@ export default function StudioPage() {
     setLoading(true); setError("");
     try {
       const result = await callAgent<string>("chapter", {
-        genre, length, style, thought, idea: ideas[selectedIdea], outline, instruction,
+        genre, length, style, styleInstruction, thought, idea: ideas[selectedIdea], outline, instruction,
         chapterNumber: chapters.length + (chapterId ? 0 : 1),
         previousChapter: chapters.at(-1)?.content,
       });
@@ -131,7 +154,7 @@ export default function StudioPage() {
     const source = start === end ? chapter : chapter.slice(start, end);
     setLoading(true); setError("");
     try {
-      const result = await callAgent<string>("rewrite", { style, selectedText: source, instruction: instruction || "在不改变情节的情况下润色" });
+      const result = await callAgent<string>("rewrite", { style, styleInstruction, selectedText: source, instruction: instruction || "在不改变情节的情况下润色" });
       setChapter(start === end ? result.data : chapter.slice(0, start) + result.data + chapter.slice(end));
       setModel(result.model);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "改写失败"); }
@@ -173,6 +196,8 @@ export default function StudioPage() {
       genre,
       length,
       style,
+      styleId,
+      styleInstruction,
       thought,
       idea: ideas[selectedIdea],
       outline: outline ?? undefined,
@@ -223,7 +248,15 @@ export default function StudioPage() {
             <fieldset><legend>你的想法 <small>可以只写一句话，也可以暂时留白</small></legend><textarea value={thought} onChange={(event) => setThought(event.target.value)} placeholder="例如：一个替别人保管记忆的人，发现自己没有童年……" rows={5} /><span className="writing-hint">故事会从你留下的线索中生长</span></fieldset>
             <div className="form-pair">
               <fieldset><legend>篇幅</legend><div className="segmented">{["短篇", "中篇", "长篇"].map((item) => <button className={length === item ? "selected" : ""} onClick={() => setLength(item)} key={item}>{item}</button>)}</div></fieldset>
-              <fieldset><legend>个人文风</legend><select value={style} onChange={(event) => setStyle(event.target.value)}><option>雨夜独白</option><option>古典叙事</option><option>都市冷峻</option><option>轻盈青春</option></select></fieldset>
+              <fieldset><legend>创作文风</legend><select value={styleId} onChange={(event) => {
+                const profile = allStyles.find((item) => item.id === event.target.value) ?? SYSTEM_STYLE_PROFILES[0];
+                setStyleId(profile.id); setStyle(profile.name); setStyleInstruction(profile.writingInstruction);
+              }}>
+                {!allStyles.some((profile) => profile.id === styleId) && <option value={styleId}>{style}（作品快照）</option>}
+                <optgroup label="系统文风">{SYSTEM_STYLE_PROFILES.map((profile) => <option value={profile.id} key={profile.id}>{profile.name}</option>)}</optgroup>
+                {personalStyles.length > 0 && <optgroup label="我的文风">{personalStyles.map((profile) => <option value={profile.id} key={profile.id}>{profile.name}</option>)}</optgroup>}
+                <optgroup label="中外文学特征">{AUTHOR_STYLE_PROFILES.map((profile) => <option value={profile.id} key={profile.id}>{profile.name}</option>)}</optgroup>
+              </select><a className="style-library-link" href="/styles">识别或管理个人文风 →</a></fieldset>
             </div>
             <div className="studio-actions"><p>每次点击只发起一次生成请求。</p><button disabled={loading} className="button button-primary" onClick={generateIdeas}>{loading ? "故事正在寻找方向…" : "生成三个创意方案"}</button></div>
           </div>}
@@ -264,7 +297,7 @@ export default function StudioPage() {
         <aside className="agent-panel">
           <div className="agent-heading"><span className="agent-orb">✦</span><div><strong>写作伴侣</strong><small>{model}</small></div></div>
           <div className="agent-message"><p>{companionReply || (stage === "brief" ? "告诉我你想写什么。不完整的念头也很好。" : "我会回答你的具体问题，但故事的选择始终属于你。")}</p></div>
-          <div className="style-card"><span>当前文风</span><strong>{style}</strong><p>你可以询问情节、人物、措辞或节奏问题。</p></div>
+          <div className="style-card"><span>当前文风</span><strong>{style}</strong><p>{styleInstruction}</p><a href="/styles">查看文风库</a></div>
           <div className="agent-input"><input value={companionQuestion} onChange={(event) => setCompanionQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void askCompanion(); }} aria-label="询问写作伴侣" placeholder="问问写作伴侣……" /><button disabled={loading} onClick={askCompanion} aria-label="发送">↑</button></div>
         </aside>
       </main>

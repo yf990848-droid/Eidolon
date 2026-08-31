@@ -1,7 +1,7 @@
 import { runAgent, type AgentTask } from "../../../lib/agent";
 import { createTextProvider } from "../../../lib/deepseek-provider";
 
-const TASKS = new Set<AgentTask>(["idea", "outline", "chapter", "rewrite"]);
+const TASKS = new Set<AgentTask>(["style-analysis", "idea", "outline", "chapter", "rewrite"]);
 
 export async function POST(request: Request) {
   try {
