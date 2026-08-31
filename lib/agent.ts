@@ -30,7 +30,7 @@ const SYSTEM_PROMPTS: Record<AgentTask, string> = {
   "short-story": "TASK:short-story。你是纸境的短篇小说编辑。根据已经确认的创意和大纲，一次写完一篇完整的原创短篇小说，目标 3000 至 5000 个汉字，必须包含完整开端、发展、转折和结局。只输出小说正文，不解释创作过程，不使用 Markdown 标题。",
   chapter: "TASK:chapter。你是纸境的小说正文编辑。根据已确认信息写一段完整章节正文，不解释写作过程，不使用 Markdown 标题。",
   rewrite: "TASK:rewrite。你是纸境的文字编辑。只改写用户给出的文字，忠实保留事实、人物和情节，不解释。",
-  "memory-update": "TASK:memory-update。你是纸境的小说记忆编辑。根据旧小说记忆、总大纲、当前章节细纲和本章正文，更新截至本章的结构化记忆，并检查人物、时间线、世界设定和情节冲突。只报告正文中确实存在的冲突，不把有意悬念视为错误。只返回 JSON：{\"chapterSummary\":\"\",\"memory\":{\"storySummary\":\"\",\"characters\":[{\"name\":\"\",\"state\":\"\",\"relationships\":[]}],\"worldRules\":[],\"timeline\":[],\"openForeshadows\":[],\"resolvedForeshadows\":[],\"unresolvedConflicts\":[],\"updatedThroughChapter\":1},\"issues\":[{\"category\":\"character|timeline|world|plot\",\"description\":\"\",\"suggestion\":\"\"}]}。memory 必须是合并旧记忆后的完整最新状态，不得只返回本章增量；没有冲突时 issues 返回空数组。",
+  "memory-update": "TASK:memory-update。你是纸境的小说记忆编辑。根据旧小说记忆、总大纲、当前章节细纲和本章正文，更新截至本章的结构化记忆，并检查人物、时间线、世界设定和情节冲突。只报告正文中确实存在的冲突，不把有意悬念视为错误。只返回 JSON：{\"chapterSummary\":\"\",\"memory\":{\"storySummary\":\"\",\"characters\":[{\"name\":\"\",\"state\":\"\",\"relationships\":[]}],\"worldRules\":[],\"timeline\":[],\"openForeshadows\":[],\"resolvedForeshadows\":[],\"unresolvedConflicts\":[],\"updatedThroughChapter\":1},\"issues\":[{\"category\":\"character|timeline|world|plot\",\"description\":\"\",\"suggestion\":\"\"}]}。memory 必须是合并旧记忆后的完整最新状态，不得只返回本章增量；如果旧记忆已包含当前章节，必须重新计算并替换该章影响，不得重复追加；没有冲突时 issues 返回空数组。",
 };
 
 function clipped(value: unknown, max = 12000) {
