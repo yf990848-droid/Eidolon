@@ -1,4 +1,5 @@
 import type { TextModelProvider } from "./providers";
+import { agentLog, shouldLogRawAgentResponse } from "./logger";
 
 export type AgentTask = "style-analysis" | "idea" | "outline" | "chapter" | "rewrite";
 
@@ -33,7 +34,30 @@ function parseJson(content: string) {
   return JSON.parse(cleaned) as unknown;
 }
 
-export async function runAgent(provider: TextModelProvider, task: AgentTask, input: AgentInput) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function inspectStyleAnalysis(data: unknown) {
+  const root = isRecord(data) ? data : {};
+  const features = isRecord(root.features) ? root.features : {};
+  const requiredFeatures = ["perspective", "rhythm", "sentenceStyle", "dialogue", "description", "emotion", "imagery"];
+  const missingFields = [
+    ...(typeof root.summary === "string" && root.summary.trim() ? [] : ["summary"]),
+    ...(isRecord(root.features) ? [] : ["features"]),
+    ...requiredFeatures.filter((key) => typeof features[key] !== "string" || !features[key].trim()),
+    ...(typeof root.writingInstruction === "string" && root.writingInstruction.trim() ? [] : ["writingInstruction"]),
+  ];
+
+  return {
+    topLevelKeys: Object.keys(root),
+    featureKeys: Object.keys(features),
+    missingFields,
+  };
+}
+
+export async function runAgent(provider: TextModelProvider, task: AgentTask, input: AgentInput, requestId = crypto.randomUUID()) {
+  const startedAt = Date.now();
   const result = await provider.generate({
     system: SYSTEM_PROMPTS[task],
     prompt: `以下是用户已经确认的创作信息，请严格基于它完成任务：\n${clipped(input)}`,
@@ -41,9 +65,42 @@ export async function runAgent(provider: TextModelProvider, task: AgentTask, inp
     maxTokens: task === "chapter" ? 3600 : task === "style-analysis" ? 1800 : 2200,
   });
 
+  if (task === "style-analysis" && shouldLogRawAgentResponse()) {
+    agentLog("warn", "agent.style.raw_response", { requestId, model: result.model, content: result.content });
+  }
+
+  let data: unknown = result.content;
+  if (task === "style-analysis" || task === "idea" || task === "outline") {
+    try {
+      data = parseJson(result.content);
+    } catch (error) {
+      agentLog("error", "agent.response.invalid_json", {
+        requestId,
+        task,
+        model: result.model,
+        durationMs: Date.now() - startedAt,
+        contentLength: result.content.length,
+        error: error instanceof Error ? error.message : "JSON parse failed",
+      });
+      throw error;
+    }
+  }
+
+  if (task === "style-analysis") {
+    const shape = inspectStyleAnalysis(data);
+    agentLog(shape.missingFields.length ? "warn" : "info", "agent.style.response_shape", {
+      requestId,
+      model: result.model,
+      durationMs: Date.now() - startedAt,
+      contentLength: result.content.length,
+      ...shape,
+    });
+  }
+
   return {
+    requestId,
     task,
-    data: task === "style-analysis" || task === "idea" || task === "outline" ? parseJson(result.content) : result.content,
+    data,
     model: result.model,
     usage: result.usage,
   };
