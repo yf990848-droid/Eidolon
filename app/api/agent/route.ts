@@ -2,7 +2,7 @@ import { runAgent, type AgentTask } from "../../../lib/agent";
 import { createTextProvider } from "../../../lib/deepseek-provider";
 import { agentLog } from "../../../lib/logger";
 
-const TASKS = new Set<AgentTask>(["style-analysis", "idea", "outline", "chapter", "rewrite"]);
+const TASKS = new Set<AgentTask>(["style-analysis", "idea", "outline", "chapter-outline", "short-story", "chapter", "rewrite"]);
 
 export async function POST(request: Request) {
   const requestId = crypto.randomUUID();

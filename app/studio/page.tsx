@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../../components/app-shell";
-import { createLocalId, getBook, saveBook, type BookStatus, type StoredChapter } from "../../lib/local-books";
+import { createLocalId, getBook, saveBook, type BookStatus, type StoredChapter, type StoredChapterOutline } from "../../lib/local-books";
 import { GENRES, IDEAS as FALLBACK_IDEAS } from "../../lib/mock-data";
 import {
   AUTHOR_STYLE_PROFILES,
@@ -13,7 +13,7 @@ import {
   type StyleProfile,
 } from "../../lib/style-profiles";
 
-type Stage = "brief" | "ideas" | "outline" | "chapter";
+type Stage = "brief" | "ideas" | "outline" | "chapter-outline" | "chapter";
 type Idea = { label: string; title: string; summary: string; sample: string };
 type Outline = { premise: string; tone: string; acts: Array<{ title: string; summary: string }> };
 
@@ -40,6 +40,8 @@ export default function StudioPage() {
   const [ideas, setIdeas] = useState<Idea[]>(FALLBACK_IDEAS);
   const [selectedIdea, setSelectedIdea] = useState(0);
   const [outline, setOutline] = useState<Outline | null>(null);
+  const [chapterCount, setChapterCount] = useState(8);
+  const [chapterOutlines, setChapterOutlines] = useState<StoredChapterOutline[]>([]);
   const [chapter, setChapter] = useState("");
   const [bookId, setBookId] = useState("");
   const [chapters, setChapters] = useState<StoredChapter[]>([]);
@@ -81,6 +83,8 @@ export default function StudioPage() {
         setThought(savedBook.thought ?? "");
         if (savedBook.idea) setIdeas([savedBook.idea]);
         setOutline(savedBook.outline ?? null);
+        setChapterCount(savedBook.chapterCount ?? (savedBook.length === "短篇" ? 1 : Math.max(savedBook.chapters.length, savedBook.length === "长篇" ? 20 : 8)));
+        setChapterOutlines(savedBook.chapterOutlines ?? []);
         setChapters(savedBook.chapters);
         const lastChapter = savedBook.chapters.at(-1);
         if (lastChapter) {
@@ -99,20 +103,37 @@ export default function StudioPage() {
         applyStyle(parsed.style, parsed.styleId, parsed.styleInstruction);
         setThought(parsed.thought ?? "");
         setChapter(parsed.chapter ?? "");
+        setChapterCount(parsed.chapterCount ?? (parsed.length === "长篇" ? 20 : parsed.length === "短篇" ? 1 : 8));
+        setChapterOutlines(parsed.chapterOutlines ?? []);
       }
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem("paper-realm-ai-draft", JSON.stringify({ genre, length, style, styleId, styleInstruction, thought, chapter }));
+    window.localStorage.setItem("paper-realm-ai-draft", JSON.stringify({ genre, length, style, styleId, styleInstruction, thought, chapter, chapterCount, chapterOutlines }));
     const showTimer = window.setTimeout(() => setSaved(true), 0);
     const hideTimer = window.setTimeout(() => setSaved(false), 1200);
     return () => { window.clearTimeout(showTimer); window.clearTimeout(hideTimer); };
-  }, [genre, length, style, styleId, styleInstruction, thought, chapter]);
+  }, [genre, length, style, styleId, styleInstruction, thought, chapter, chapterCount, chapterOutlines]);
 
-  const progress = useMemo(() => ({ brief: 1, ideas: 2, outline: 3, chapter: 5 })[stage], [stage]);
-  const titles = { brief: "从哪里开始？", ideas: "选择故事的命运", outline: "搭起故事的骨骼", chapter: "写下故事的第一声呼吸" };
+  const stageLabels = useMemo(() => length === "长篇"
+    ? ["故事起点", "创意方案", "故事大纲", "章节细纲", "正文创作"]
+    : ["故事起点", "创意方案", length === "短篇" ? "故事大纲" : "大纲与章数", length === "短篇" ? "完整正文" : "逐章创作"], [length]);
+  const stageOrder = useMemo<Stage[]>(() => length === "长篇"
+    ? ["brief", "ideas", "outline", "chapter-outline", "chapter"]
+    : ["brief", "ideas", "outline", "chapter"], [length]);
+  const progress = Math.max(1, stageOrder.indexOf(stage) + 1);
+  const titles: Record<Stage, string> = {
+    brief: "从哪里开始？",
+    ideas: "选择故事的命运",
+    outline: "搭起故事的骨骼",
+    "chapter-outline": "铺开每一章的路径",
+    chapter: length === "短篇" ? "完整地写完这个故事" : "写下故事的第一声呼吸",
+  };
+  const chapterIndex = chapterId ? chapters.findIndex((item) => item.id === chapterId) : -1;
+  const currentChapterNumber = chapterIndex >= 0 ? chapterIndex + 1 : chapters.length + 1;
+  const canWriteNext = length !== "短篇" && currentChapterNumber < chapterCount;
 
   async function generateIdeas() {
     setLoading(true); setError("");
@@ -133,17 +154,73 @@ export default function StudioPage() {
     finally { setLoading(false); }
   }
 
-  async function generateChapter() {
+  function selectLength(nextLength: string) {
+    setLength(nextLength);
+    setChapterCount(nextLength === "短篇" ? 1 : nextLength === "长篇" ? 20 : 8);
+    setChapterOutlines([]);
+  }
+
+  function validateChapterCount() {
+    const min = length === "长篇" ? 10 : 3;
+    const max = length === "长篇" ? 50 : 20;
+    if (!Number.isInteger(chapterCount) || chapterCount < min || chapterCount > max) {
+      setError(`${length}章节数需要设置为 ${min}～${max} 章`);
+      return false;
+    }
+    return true;
+  }
+
+  async function generateShortStory() {
     setLoading(true); setError("");
     try {
-      const result = await callAgent<string>("chapter", {
-        genre, length, style, styleInstruction, thought, idea: ideas[selectedIdea], outline, instruction,
-        chapterNumber: chapters.length + (chapterId ? 0 : 1),
-        previousChapter: chapters.at(-1)?.content,
-      });
-      setChapter(result.data); setModel(result.model); setStage("chapter");
+      const result = await callAgent<string>("short-story", { genre, length, style, styleInstruction, thought, idea: ideas[selectedIdea], outline });
+      setChapter(result.data); setChapterTitle("全文"); setModel(result.model); setStage("chapter");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "生成失败"); }
     finally { setLoading(false); }
+  }
+
+  async function generateChapterOutlines() {
+    if (!validateChapterCount()) return;
+    setLoading(true); setError("");
+    try {
+      const result = await callAgent<{ chapters: StoredChapterOutline[] }>("chapter-outline", {
+        genre, length, style, styleInstruction, thought, idea: ideas[selectedIdea], outline, chapterCount,
+      });
+      if (!Array.isArray(result.data.chapters) || result.data.chapters.length !== chapterCount) throw new Error("章节细纲数量与设定章数不一致，请重试");
+      setChapterOutlines(result.data.chapters); setModel(result.model); setStage("chapter-outline");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "生成失败"); }
+    finally { setLoading(false); }
+  }
+
+  async function confirmOutline() {
+    if (length === "短篇") await generateShortStory();
+    else if (length === "长篇") await generateChapterOutlines();
+    else if (validateChapterCount()) await generateChapter();
+  }
+
+  async function generateChapter() {
+    if (length === "短篇") { await generateShortStory(); return; }
+    setLoading(true); setError("");
+    try {
+      const editingIndex = chapterId ? chapters.findIndex((item) => item.id === chapterId) : -1;
+      const chapterNumber = editingIndex >= 0 ? editingIndex + 1 : chapters.length + 1;
+      const plan = length === "长篇" ? chapterOutlines[chapterNumber - 1] : undefined;
+      const result = await callAgent<string>("chapter", {
+        genre, length, style, styleInstruction, thought, idea: ideas[selectedIdea], outline, instruction,
+        chapterCount,
+        chapterNumber,
+        chapterOutline: plan,
+        previousChapter: chapters[chapterNumber - 2]?.content,
+      });
+      setChapter(result.data);
+      if (!chapterId) setChapterTitle(plan?.title || `第${chapterNumber}章`);
+      setModel(result.model); setStage("chapter");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "生成失败"); }
+    finally { setLoading(false); }
+  }
+
+  function updateChapterOutline(index: number, key: keyof StoredChapterOutline, value: string) {
+    setChapterOutlines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
   }
 
   async function rewriteSelection() {
@@ -201,6 +278,8 @@ export default function StudioPage() {
       thought,
       idea: ideas[selectedIdea],
       outline: outline ?? undefined,
+      chapterCount,
+      chapterOutlines: length === "长篇" ? chapterOutlines : undefined,
       status,
       chapters: nextChapters,
       createdAt: existing?.createdAt ?? now,
@@ -216,10 +295,12 @@ export default function StudioPage() {
     if (status === "completed") {
       window.location.href = "/library";
     } else if (continueWriting) {
+      const nextNumber = nextChapters.length + 1;
+      const nextPlan = length === "长篇" ? chapterOutlines[nextNumber - 1] : undefined;
       setChapter("");
       setChapterId("");
-      setChapterTitle(`第${nextChapters.length + 1}章`);
-      setInstruction("承接上一章继续推进情节，并在结尾留下新的悬念。");
+      setChapterTitle(nextPlan?.title || `第${nextNumber}章`);
+      setInstruction(nextPlan ? `按照“${nextPlan.goal}”推进本章，并落实当前章节细纲。` : "承接上一章继续推进情节，并在结尾留下新的悬念。");
     }
   }
 
@@ -229,7 +310,7 @@ export default function StudioPage() {
         <aside className="studio-rail">
           <div className="rail-title"><span>AI 共创</span><strong>{ideas[selectedIdea]?.title ?? "尚未命名"}</strong></div>
           <ol className="stage-list">
-            {["故事起点", "创意方案", "故事大纲", "章节细纲", "正文创作"].map((label, index) => (
+            {stageLabels.map((label, index) => (
               <li className={index + 1 === progress ? "current" : index + 1 < progress ? "done" : ""} key={label}><span>{String(index + 1).padStart(2, "0")}</span>{label}</li>
             ))}
           </ol>
@@ -247,7 +328,7 @@ export default function StudioPage() {
             <fieldset><legend>选择题材</legend><div className="choice-grid genres">{GENRES.map((item) => <button className={genre === item.name ? "selected" : ""} onClick={() => setGenre(item.name)} key={item.name}><span>{item.symbol}</span>{item.name}</button>)}</div></fieldset>
             <fieldset><legend>你的想法 <small>可以只写一句话，也可以暂时留白</small></legend><textarea value={thought} onChange={(event) => setThought(event.target.value)} placeholder="例如：一个替别人保管记忆的人，发现自己没有童年……" rows={5} /><span className="writing-hint">故事会从你留下的线索中生长</span></fieldset>
             <div className="form-pair">
-              <fieldset><legend>篇幅</legend><div className="segmented">{["短篇", "中篇", "长篇"].map((item) => <button className={length === item ? "selected" : ""} onClick={() => setLength(item)} key={item}>{item}</button>)}</div></fieldset>
+              <fieldset><legend>篇幅</legend><div className="segmented">{["短篇", "中篇", "长篇"].map((item) => <button className={length === item ? "selected" : ""} onClick={() => selectLength(item)} key={item}>{item}</button>)}</div></fieldset>
               <fieldset><legend>创作文风</legend><select value={styleId} onChange={(event) => {
                 const profile = allStyles.find((item) => item.id === event.target.value) ?? SYSTEM_STYLE_PROFILES[0];
                 setStyleId(profile.id); setStyle(profile.name); setStyleInstruction(profile.writingInstruction);
@@ -276,19 +357,39 @@ export default function StudioPage() {
               <section><span>故事基调</span><textarea value={outline.tone} onChange={(event) => setOutline({ ...outline, tone: event.target.value })} rows={3} /></section>
               <section className="wide"><span>故事结构</span>{outline.acts.map((act, index) => <div className="act" key={`${act.title}-${index}`}><strong>{act.title}</strong><p>{act.summary}</p></div>)}</section>
             </div>
+            {length === "短篇" ? <p className="stage-intro">确认后将一次生成 3000～5000 字完整短篇，并作为“全文”保存。</p> : <div className="chapter-instruction">
+              <label htmlFor="chapter-count">预计章节数</label>
+              <input id="chapter-count" type="number" min={length === "长篇" ? 10 : 3} max={length === "长篇" ? 50 : 20} value={chapterCount} onChange={(event) => setChapterCount(Number(event.target.value))} />
+              <span>{length === "长篇" ? "允许 10～50 章，确认后先生成章节细纲。" : "允许 3～20 章，确认后逐章生成。"}</span>
+            </div>}
             <div className="chapter-instruction"><label htmlFor="chapter-instruction">正文要求</label><input id="chapter-instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} /></div>
-            <div className="studio-actions"><button className="button button-ghost" onClick={() => setStage("ideas")}>返回方案</button><button disabled={loading} className="button button-primary" onClick={generateChapter}>{loading ? "故事正在落笔…" : "确认大纲，生成第一章"}</button></div>
+            <div className="studio-actions"><button className="button button-ghost" onClick={() => setStage("ideas")}>返回方案</button><button disabled={loading} className="button button-primary" onClick={confirmOutline}>{loading ? "故事正在落笔…" : length === "短篇" ? "确认大纲，生成整篇" : length === "长篇" ? "确认大纲，生成章节细纲" : "确认大纲，生成第一章"}</button></div>
+          </div>}
+
+          {stage === "chapter-outline" && <div className="outline-stage reveal">
+            <div className="outline-title"><div><span>长篇章节规划</span><h2>共 {chapterCount} 章</h2></div><button className="button button-small button-quiet" onClick={() => setStage("outline")}>返回大纲</button></div>
+            <p className="stage-intro">逐章检查标题、目标和转折；正文生成时只读取当前章细纲、总体大纲与上一章。</p>
+            <div className="chapter-outline-list">{chapterOutlines.map((item, index) => <article className="chapter-outline-card" key={index}>
+              <span>第 {index + 1} 章</span>
+              <input aria-label={`第${index + 1}章标题`} value={item.title} onChange={(event) => updateChapterOutline(index, "title", event.target.value)} />
+              <label>本章目标<textarea rows={2} value={item.goal} onChange={(event) => updateChapterOutline(index, "goal", event.target.value)} /></label>
+              <label>主要事件<textarea rows={2} value={item.events} onChange={(event) => updateChapterOutline(index, "events", event.target.value)} /></label>
+              <label>冲突与转折<textarea rows={2} value={item.turn} onChange={(event) => updateChapterOutline(index, "turn", event.target.value)} /></label>
+              <label>伏笔与回收<textarea rows={2} value={item.foreshadow} onChange={(event) => updateChapterOutline(index, "foreshadow", event.target.value)} /></label>
+              <label>结尾钩子<textarea rows={2} value={item.hook} onChange={(event) => updateChapterOutline(index, "hook", event.target.value)} /></label>
+            </article>)}</div>
+            <div className="studio-actions"><button className="button button-ghost" onClick={() => setStage("outline")}>调整总大纲</button><button disabled={loading || chapterOutlines.length !== chapterCount} className="button button-primary" onClick={generateChapter}>{loading ? "故事正在落笔…" : "确认细纲，生成第一章"}</button></div>
           </div>}
 
           {stage === "chapter" && <div className="chapter-stage reveal">
-            <div className="chapter-toolbar"><div><span>正文草稿</span><strong>{chapter.length} 字</strong></div><button disabled={loading || !chapter} className="button button-small button-quiet" onClick={rewriteSelection}>润色选中文字</button></div>
+            <div className="chapter-toolbar"><div><span>{length === "短篇" ? "完整短篇" : `第 ${currentChapterNumber} / ${chapterCount} 章`}</span><strong>{chapter.length} 字</strong></div><button disabled={loading || !chapter} className="button button-small button-quiet" onClick={rewriteSelection}>润色选中文字</button></div>
             <input className="chapter-title-input" aria-label="章节名称" value={chapterTitle} onChange={(event) => setChapterTitle(event.target.value)} />
             <textarea ref={chapterRef} value={chapter} onChange={(event) => setChapter(event.target.value)} placeholder="故事正在寻找它的下一句话。" aria-label="章节正文" />
             <div className="chapter-instruction"><label htmlFor="rewrite-instruction">生成或改写要求</label><input id="rewrite-instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} /></div>
             <div className="studio-actions">
               <button disabled={loading} className="button button-ghost" onClick={generateChapter}>{loading ? "正在生成…" : chapter ? "按要求重新生成" : "生成本章"}</button>
               <button className="button button-quiet" onClick={() => persistBook("writing")}>保存到书架</button>
-              <button className="button button-quiet" onClick={() => persistBook("writing", true)}>保存并写下一章</button>
+              {canWriteNext && <button className="button button-quiet" onClick={() => persistBook("writing", true)}>保存并写下一章</button>}
               <button className="button button-primary" onClick={() => persistBook("completed")}>完成作品</button>
             </div>
           </div>}

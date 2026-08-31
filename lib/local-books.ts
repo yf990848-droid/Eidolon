@@ -8,6 +8,15 @@ export type StoredChapter = {
   updatedAt: string;
 };
 
+export type StoredChapterOutline = {
+  title: string;
+  goal: string;
+  events: string;
+  turn: string;
+  foreshadow: string;
+  hook: string;
+};
+
 export type StoredBook = {
   id: string;
   mode: BookMode;
@@ -20,6 +29,8 @@ export type StoredBook = {
   thought?: string;
   idea?: { label: string; title: string; summary: string; sample: string };
   outline?: { premise: string; tone: string; acts: Array<{ title: string; summary: string }> };
+  chapterCount?: number;
+  chapterOutlines?: StoredChapterOutline[];
   status: BookStatus;
   chapters: StoredChapter[];
   createdAt: string;

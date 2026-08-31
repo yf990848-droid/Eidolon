@@ -82,6 +82,28 @@ export class MockTextProvider implements TextModelProvider {
         }),
       };
     }
+    if (request.system.includes("TASK:chapter-outline")) {
+      const count = Math.max(1, Number(request.prompt.match(/\"chapterCount\":(\d+)/)?.[1] ?? 20));
+      return {
+        model: "paper-realm-mock",
+        content: JSON.stringify({
+          chapters: Array.from({ length: count }, (_, index) => ({
+            title: `第${index + 1}章 · ${index === 0 ? "陌生的记忆" : index === count - 1 ? "主动选择的人生" : "线索继续延伸"}`,
+            goal: index === 0 ? "建立人物处境并引出核心谜团" : index === count - 1 ? "完成核心选择并收束人物弧光" : "推进调查并改变人物关系",
+            events: "主角沿新线索行动，并发现此前认知存在缺口。",
+            turn: "一项看似可靠的证据指向相反结论。",
+            foreshadow: index < count - 1 ? "留下与旧照片和雨夜有关的线索。" : "回收旧照片和雨夜线索。",
+            hook: index < count - 1 ? "一个熟悉的名字出现在陌生人的记录中。" : "主角决定如何继续此后的人生。",
+          })),
+        }),
+      };
+    }
+    if (request.system.includes("TASK:short-story")) {
+      return {
+        model: "paper-realm-mock",
+        content: "雨是在黄昏以后落下来的。林默推开记忆典当行的门，发现柜台上多了一只没有标签的玻璃瓶。瓶中那场雪缓慢地下着，他认出了雪地尽头那扇只在梦里出现过的门。\n\n他沿着瓶中留下的线索找到旧城，终于明白自己典当掉的并不是童年，而是面对失去的勇气。天亮以前，他将记忆归还原处，也决定不再用遗忘保护自己。\n\n雨停时，玻璃瓶里最后一片雪落在门槛上。林默推门走进清晨，第一次记得自己要去哪里。",
+      };
+    }
     if (request.system.includes("TASK:chapter")) {
       return { model: "paper-realm-mock", content: "雨是在黄昏以后落下来的。林默推开记忆典当行的门时，铜铃没有响，柜台上却多了一只没有标签的玻璃瓶。瓶中那场雪缓慢地下着，他认出了雪地尽头那扇只在梦里出现过的门。" };
     }
